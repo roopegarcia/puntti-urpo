@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Added and staged the authorized isolated AMD64 production stack on the NUC: pinned multi-stage images, nginx/API routing, Secure sessions, private PostgreSQL, health/resource limits and rotated logs.
-- Added private custom-format database backups, verified scratch restore and daily scheduling; public route status is tracked in DEPLOYMENT.md. Production starts with an empty owner account and fresh credentials.
+- Published the authorized isolated AMD64 production stack on the NUC: pinned multi-stage images, nginx/API routing, Secure sessions, private PostgreSQL, health/resource limits and rotated logs.
+- Added private custom-format database backups, verified scratch restore and daily scheduling; public HTTPS, both accounts, private records and logout verified; operation details are tracked in DEPLOYMENT.md. Production starts with an empty owner account and fresh credentials.
 
 - Added two manually provisioned session accounts (private owner and read-only demo), BCrypt configuration, CSRF-protected login/logout, generic security errors and a bounded login budget.
 - Added V6 ownership backfill, account-scoped workout/nested/catalogue access and invented demo records; owner and demo cannot access each other's workouts or private custom catalogue data.

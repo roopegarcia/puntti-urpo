@@ -2,7 +2,7 @@
 
 ## Current deployment status — 2026-10-22
 
-Roope explicitly authorized commit, push and deployment. Application commit `ea7ebb7` and production preparation/fixes are pushed to `origin/master`. The dedicated AMD64 stack is running and verified on the NUC using app image release `62255cd668da`. **Public Cloudflare route creation is awaiting the required final browser-action confirmation; the origin is staged, not yet claimed as publicly live.**
+Roope explicitly authorized commit, push and deployment. Application commit `ea7ebb7` and production preparation/fixes are pushed to `origin/master`. The dedicated AMD64 stack is running and verified on the NUC using app image release `62255cd668da`. **Live at https://puntti-urpo.iltapaska.com.** Roope explicitly confirmed creating the public route, and Cloudflare confirmed both route and DNS creation on the existing `roopenuc` tunnel. The only new hostname targets `http://127.0.0.1:8106`.
 
 Target hostname: `puntti-urpo.iltapaska.com`. SSH: `roope@192.168.1.21`. Project: `/home/roope/apps/puntti-urpo`. Compose project: `puntti-urpo-production`. The existing `nuc` SSH alias selects `roopeadmin`, which did not authenticate; no SSH configuration was changed.
 
@@ -24,6 +24,8 @@ Images build natively on the NUC from pinned official multi-architecture Temurin
 - Trusted-loopback cookie smoke tests verified fresh owner/demo login, Secure cookie attributes, current identity, owner-only writes, CSRF denial, direct/nested private-record 404s and logout invalidation. Owner initially had zero workouts and ten built-ins; demo had one invented workout. A disposable 82.25 kg × 6 at RPE 8.5 returned repetition-based e1RM 98.70. Database restart preserved that set. Only the named disposable workout was deleted afterward; owner is empty again.
 - PostgreSQL custom-format backup succeeded and restored into an isolated temporary database with all six migrations and the invented demo session. That scratch database was removed; live records were not overwritten. Backups/configuration are private and ignored by Git.
 - A daily backup entry was added without replacing existing user crontab jobs. Schedule is 03:17 America/New_York (10:17 Europe/Helsinki at the verified 2026-10-22 offsets); offsets can differ around seasonal transitions. Seven-day local retention is configured. Off-host encrypted backup storage is **not configured** and same-disk backups do not protect against NUC loss.
+
+- Public HTTPS verification with curl passed trusted TLS, Finnish HTML/security headers, owner/demo login, Secure/HttpOnly session cookies, CSRF denial, demo write denial, private record isolation, saved set/estimate reads and logout invalidation. The disposable public test workout was removed; owner remains empty. Safari rendered the logo, Finnish login and GitHub/Portfolio/Blogi footer. Cloudflare rejected Python urllib with error 1010; ordinary curl and Safari worked without changing Cloudflare security settings.
 
 ## Local development remains separate
 
@@ -50,7 +52,7 @@ Use the exact commands in [deploy/README.md](../deploy/README.md). Upload only G
 
 Before a future schema change, create a backup and verify scratch restore. Code rollback uses the previous known-good image tag; a schema-incompatible rollback needs a separate recovery plan. Never reset a volume, edit applied V1–V6 migrations or restore over live records as a shortcut. Destructive recovery requires an explicit target and authorization. Keep a safe copy of production configuration/password-manager entries separately from database backups.
 
-The first deployment has no previous production release. If rollback is needed before publication, stop only this stack's web/backend and retain its database volume/backups for diagnosis. Existing NUC services must not be stopped to free ports or fix this app.
+The first deployment has no previous production release. If emergency withdrawal is needed, stop only this stack's web/backend and retain its database volume/backups for diagnosis. Existing NUC services must not be stopped to free ports or fix this app.
 
 ## Logs and troubleshooting
 

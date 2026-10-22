@@ -1,5 +1,23 @@
 # Learning log
 
+## 2026-10-22 — Authorized first production publication
+
+**Authorization and scope:** Roope requested commit, push and deployment, chose an empty production owner, and explicitly confirmed the public Cloudflare route. This completes the approved publication; Milestone 6 history/progression remains planned. No local records were imported and unrelated NUC apps/routes/storage were preserved.
+
+**Built:** independent AMD64 Compose project on the NUC, pinned multi-stage Java/React images, non-root read-only app/web containers, private PostgreSQL, resource limits, health-gated startup, nginx same-origin API and security headers. Only nginx binds loopback 8106; existing roopenuc publishes the new hostname over HTTPS. Fresh credentials are in ignored private configuration/handoff files, never Git or frontend assets.
+
+**Actual verification:** backend 73 tests passed (including real PostgreSQL integration); frontend TypeScript/35 tests and production build passed. Native NUC image builds and all three container health checks succeeded. Trusted-loopback checks proved owner/demo login, role/ownership/CSRF boundaries, logout and a real 82.25 kg × 6 set with RPE 8.5/e1RM 98.70; the set survived this project's database restart. Only the disposable verification workout was deleted. Custom-format backup restored successfully into an isolated scratch database with six migrations and the invented demo record; the scratch database was removed. Daily private backups preserve existing cron jobs, with seven-day retention and schedule documented in DEPLOYMENT.md. Off-host backup remains unconfigured.
+
+**Publication:** Cloudflare confirmed route/DNS creation after approval. Public curl checks passed trusted TLS, Finnish HTML/security headers, both real accounts, Secure/HttpOnly cookies, denied anonymous reads/demo writes/missing CSRF, private-record 404s, real saved set estimates and logout. Public verification data was removed; owner is empty and demo has one invented session. Safari visibly rendered the Finnish login, supplied logo and requested footer links. Python urllib received Cloudflare 1010; curl/Safari succeeded without weakening security.
+
+**Problems resolved:** missing unzip caused Maven Wrapper to select tar.gz against its pinned ZIP checksum; verified official archive checksums and installed unzip, preserving validation. Quoted full tmpfs strings to prevent Compose interpreting commas as separate mounts. Moved every nginx temporary directory onto tmpfs to preserve read-only root. No schema migration was edited.
+
+**Files:** new .dockerignore and deploy/ Dockerfiles, HealthCheck.java, nginx.conf, compose.yaml, .env.example, backup, verify-restore and README; .gitignore updated. Updated root README/changelog/AGENTS and architecture, database, authentication, deployment, decisions, Java tutorial and this log. App/auth/footer changes were committed as ea7ebb7; deployment preparation/fixes followed, with running image release 62255cd668da. Documentation-only commits retain that runtime tag. All approved work is pushed to origin/master.
+
+**Learning:** tutorial section 43 explains JDK build/runtime separation and the standalone health JVM using actual source. Understanding has not yet been demonstrated. Three questions: why can the same Java source build on ARM64 and AMD64? How do java -jar and java -cp select their main class? Why must heap allowance leave room for JVM/container overhead? Exercise: trace HealthCheck.java and reproduce a dependency outage only through the disposable local Testcontainers test; do not stop production for practice.
+
+---
+
 ## 2026-10-22 — Two-account authentication and private records
 
 **Authorization:** Roope explicitly requested one account for actual workouts and one for demonstration. Implemented locally as a private writable owner and a read-only demo, following the discussed access model. No deployment, push or commit was authorized/performed.

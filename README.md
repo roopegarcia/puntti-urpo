@@ -4,7 +4,7 @@ A Finnish strength-training logbook being built for daily use, Java learning and
 
 ## Current status
 
-**Milestone 5: React frontend implemented and verified locally.** Finnish exercise browsing/custom editing, workout creation and editing, set logging, optional RPE, server-derived estimates and light/dark themes are available. Basic paged workout navigation opens existing sessions; exercise history, progression charts and statistics remain Milestone 6. Two manually provisioned accounts now use session authentication: `owner` has private logging access; `demo` has read-only access to invented example records. The isolated production stack is staged and verified on the NUC; public-route completion is tracked in DEPLOYMENT.md.
+**Milestone 5: React frontend implemented and verified locally.** Finnish exercise browsing/custom editing, workout creation and editing, set logging, optional RPE, server-derived estimates and light/dark themes are available. Basic paged workout navigation opens existing sessions; exercise history, progression charts and statistics remain Milestone 6. Two manually provisioned accounts now use session authentication: `owner` has private logging access; `demo` has read-only access to invented example records. The isolated production stack is live at **https://puntti-urpo.iltapaska.com**; verified operation and backup limits are documented in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Build and verify a complete milestone, then review the working code and tutorial. Stop for approval between milestones; tutorial exercises do not block implementation within an approved milestone.
 
@@ -93,7 +93,7 @@ npm run dev
 
 Open **http://127.0.0.1:5175/** in a normal browser and sign in as `owner`. Choose **Aloita harjoitus**, add a catalogue exercise, enter weight/repetitions and optionally RPE, then mark the set complete. Typing alone does not save; **Tallenna muutokset** saves edits without changing completion. **Lisää sarja** copies the previous completed set's load/reps and clears effort/completion. The database stores real records; these are not demo fixtures. Custom exercises are under **Liikkeet → Oma liike**. Built-ins cannot be edited.
 
-Swagger remains at **http://127.0.0.1:8080/swagger-ui/index.html**, requiring an owner session on that origin. The browser session works on the same hostname through Vite or directly on Java; use the documented cookie-based login sequence for curl. Stop Vite with Ctrl+C. If needed use `npm run dev -- --port 5176`; for a different backend port use `API_PROXY_TARGET=http://127.0.0.1:18080 npm run dev`. The default 5175 avoids other local projects; strict-port mode fails clearly instead of silently selecting another port. Keep this development setup on loopback; production hosting still needs the deployment review.
+Swagger remains at **http://127.0.0.1:8080/swagger-ui/index.html**, requiring an owner session on that origin. The browser session works on the same hostname through Vite or directly on Java; use the documented cookie-based login sequence for curl. Stop Vite with Ctrl+C. If needed use `npm run dev -- --port 5176`; for a different backend port use `API_PROXY_TARGET=http://127.0.0.1:18080 npm run dev`. The default 5175 avoids other local projects; strict-port mode fails clearly instead of silently selecting another port. Keep this development setup on loopback; production uses the separately verified nginx/Compose stack.
 
 See [frontend operation and design](docs/FRONTEND.md) for saving, connection failures, accessibility checks and limitations.
 
