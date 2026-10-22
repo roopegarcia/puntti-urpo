@@ -53,15 +53,14 @@ export function WorkoutList({
       </header>
       <section className="start-panel">
         <div className="start-copy">
-          <span className="label-dot">SEURAAVA HYVÄ TOISTO</span>
+          <span className="label-dot">SYTTYY NYT VÄHÄN SIIHEN</span>
           <h2>
-            Vähemmän säätöä.
+            Simple.
             <br />
-            Enemmän rautaa.
+            Not easy.
           </h2>
           <p>
-            Kirjaa sarjat, tunnista rasittavuus ja keskity tekemiseen. Kaikki
-            olennainen yhdessä paikassa.
+            Kirjaa sarjat, RPE ja keskity tekemiseen. Jokainen toisto on yhtä tärkeä.
           </p>
           {!creating && !readOnly && (
             <button
