@@ -813,3 +813,23 @@ Passwords are long-term secrets; sessions are temporary credentials; recorded wo
 3. Why must React obtain a new CSRF token after login, and why should a failed write not be replayed automatically?
 
 Exercise: in separate normal/private browser sessions, log in as owner and demo. Create one disposable owner workout and try opening its URL as demo. Explain the 404, the separate demo list, and the disabled demo controls using the Java code. Remove only your disposable owner workout. Understanding has not yet been demonstrated; this is a review exercise after implementation.
+
+## 43. Build with a JDK, run with a runtime image
+
+`deploy/backend.Dockerfile` has separate build and runtime stages. The build stage uses Temurin JDK 25 to run the pinned Maven Wrapper and compile/package Java. The runtime stage copies only the executable Spring Boot JAR and a tiny health-check class into a Temurin runtime image. This is similar to compiling TypeScript with development tools and serving the resulting JavaScript, except the final application still runs on the JVM. The runtime image does not contain Maven or project tests.
+
+`deploy/HealthCheck.java` is a standalone Java class with `main`, using JDK networking APIs and no Spring dependency. The build stage compiles it with `javac -d /health`; Docker executes it with `java -cp /health HealthCheck`. It calls internal aggregate health and exits nonzero if unhealthy. The app itself still starts with `java -jar /app/app.jar`; these are two conventional JVM entry mechanisms. The short-lived health JVM is separate from the long-running application process.
+
+**Why it matters:** a healthy container process alone cannot prove dependency readiness. The Java health helper checks the app/database result before the web service is considered ready. Container memory includes JVM overhead, threads and the short health process, not only the Java heap.
+
+**Exercise:** compare the two Java commands in the Dockerfile/Compose file and explain how each locates its main class. Identify the build tools absent from the final stage.
+
+**Verify:** native AMD64 runtime reports Temurin 25.0.4.1; Compose health reaches healthy through the compiled helper. A disposable real set survived restarting only the dedicated production database. Build wrappers retain checksum validation: the minimal image needed unzip to avoid selecting tar.gz against the pinned ZIP checksum. No checksum was disabled.
+
+## Deployment review questions and exercise
+
+1. Why does compiling Java on AMD64 not require changing the application package or source code?
+2. How do `java -jar` and `java -cp … HealthCheck` find their entry points?
+3. Why is JVM heap size smaller than the container's total memory limit?
+
+Exercise: read `deploy/HealthCheck.java` and trace what happens if Java is alive but its database is unavailable. Use the existing disposable Testcontainers outage test locally rather than stopping the production database for practice. Understanding has not yet been demonstrated; deployment verification is not a substitute for explaining the code.

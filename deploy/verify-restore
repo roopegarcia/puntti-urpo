@@ -6,11 +6,11 @@ cd "$project_dir"
 file=${1:?Pass a backup archive path}
 test -f "$file"
 # Only this dedicated stack is touched. The temporary database has a fixed safe prefix.
-scratch="punttiurpo_restorecheck_$(date -u +%Y%m%d%H%M%S)"
+scratch="punttiurpo_restorecheck_$(date -u +%Y%m%d%H%M%S)_$$"
 compose() { docker compose --env-file .env -f deploy/compose.yaml "$@"; }
 cleanup() { compose exec -T db dropdb -U punttiurpo --if-exists "$scratch" >/dev/null; }
-trap cleanup EXIT HUP INT TERM
 compose exec -T db createdb -U punttiurpo "$scratch"
+trap cleanup EXIT HUP INT TERM
 compose exec -T db pg_restore -U punttiurpo -d "$scratch" --no-owner --exit-on-error < "$file"
 compose exec -T db psql -U punttiurpo -d "$scratch" -v ON_ERROR_STOP=1 -c "SELECT count(*) AS migrated_versions FROM flyway_schema_history WHERE success; SELECT owner_key, count(*) FROM workout GROUP BY owner_key;"
 echo 'Backup restored successfully into an isolated temporary database; production records were not overwritten.'

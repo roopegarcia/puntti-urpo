@@ -1,74 +1,63 @@
 # Operation and deployment
 
-**2026-10-22 deployment authorization:** Roope explicitly requested commit, push and deployment. NUC inspection is complete; production preparation/verification is in progress. See [the production runbook](../deploy/README.md). Earlier readiness notes below record pre-deployment state and are superseded by this status as verification completes.
+## Current deployment status — 2026-10-22
 
-## Local operation
+Roope explicitly authorized commit, push and deployment. Application commit `ea7ebb7` and production preparation/fixes are pushed to `origin/master`. The dedicated AMD64 stack is running and verified on the NUC using app image release `62255cd668da`. **Public Cloudflare route creation is awaiting the required final browser-action confirmation; the origin is staged, not yet claimed as publicly live.**
 
-The [README](../README.md) provides the copyable setup, environment export, Maven and executable-JAR commands. Requirements are JDK 25, Node.js >=24 for the frontend, and running Docker Desktop; global Maven is unnecessary.
+Target hostname: `puntti-urpo.iltapaska.com`. SSH: `roope@192.168.1.21`. Project: `/home/roope/apps/puntti-urpo`. Compose project: `puntti-urpo-production`. The existing `nuc` SSH alias selects `roopeadmin`, which did not authenticate; no SSH configuration was changed.
 
-Local defaults: Java binds to `127.0.0.1:8080`; PostgreSQL binds to `127.0.0.1:54328`. The HTTP port and database settings are environment-configurable. Compose is a database-only local stack with a dedicated volume, health check and `unless-stopped` restart policy. No production Dockerfile exists yet. Workout APIs are available only after restarting the Java process with the updated build; refresh Swagger in a normal browser afterward. VS Code's in-app browser has prevented request editing in local testing.
+Roope selected an **empty production owner account**. No local workouts, custom exercises or development credentials were imported. Fresh production credentials are in the private local `.env.production.accounts` handoff; save them in a password manager and remove that file afterward. Production hashes/database password are in a private 0600 `.env` on the NUC. Never share the owner password. Demo receives only the invented V6 session.
 
-Database lifecycle commands, from the repository root:
+## Verified isolation and resources
+
+The NUC is AMD64 Debian, with approximately 7.6 GiB RAM, 4.3 GiB available at inspection and 171 GiB free disk. Existing container/port inventory was inspected before selecting free loopback port 8106. The new stack adds only its own web/backend/db containers, networks and `puntti-urpo-production_postgres_data` volume. Unrelated apps, host nginx, tunnel service and existing volumes were not reconfigured.
+
+Only web publishes `127.0.0.1:8106`. Backend and PostgreSQL have no host ports, using an internal Docker network. Web/backend run non-root with read-only filesystems, dropped capabilities, no-new-privileges, bounded PIDs and temporary writable scratch. Memory caps: backend 768 MiB, db 384 MiB, web 64 MiB, with CPU limits and rotated logs. Measured steady RSS after smoke checks was approximately 290 MiB backend, 44 MiB db and 5 MiB web; this is an observation, not a guarantee of future peak usage. Final containers were healthy with zero restart counts.
+
+Images build natively on the NUC from pinned official multi-architecture Temurin 25, Node 26, nginx and PostgreSQL 18.6 manifests. Runtime Java reports Temurin 25.0.4.1. Health-gated startup verifies PostgreSQL and the Java aggregate health before starting web. nginx serves the built React app and same-origin API. Production session cookies remain Secure/HttpOnly/SameSite=Strict, proxy headers are overwritten, Swagger/OpenAPI/public actuator paths are disabled, and CSP/security headers apply. See [the complete production runbook](../deploy/README.md) and [authentication](AUTHENTICATION.md).
+
+## Actual deployment validation
+
+- Native AMD64 multi-stage builds succeeded. The first fresh wrapper attempt failed safely because missing unzip made it download tar.gz against the ZIP checksum. Apache's published SHA-512 and the pinned ZIP SHA-256 matched; installing unzip in the build stage preserved checksum verification.
+- Docker startup exposed two configuration issues (unquoted comma-separated tmpfs values and nginx's additional temporary paths). Quoting the complete mount strings and moving all nginx temporary paths to tmpfs fixed them without weakening read-only root filesystems.
+- All three containers reached healthy status; nginx configuration validation passed. Loopback HTML/assets served, private file paths and production Swagger/actuator paths returned 404, anonymous API access returned 401, and CSP/security headers were present on frontend/API responses.
+- Trusted-loopback cookie smoke tests verified fresh owner/demo login, Secure cookie attributes, current identity, owner-only writes, CSRF denial, direct/nested private-record 404s and logout invalidation. Owner initially had zero workouts and ten built-ins; demo had one invented workout. A disposable 82.25 kg × 6 at RPE 8.5 returned repetition-based e1RM 98.70. Database restart preserved that set. Only the named disposable workout was deleted afterward; owner is empty again.
+- PostgreSQL custom-format backup succeeded and restored into an isolated temporary database with all six migrations and the invented demo session. That scratch database was removed; live records were not overwritten. Backups/configuration are private and ignored by Git.
+- A daily backup entry was added without replacing existing user crontab jobs. Schedule is 03:17 America/New_York (10:17 Europe/Helsinki at the verified 2026-10-22 offsets); offsets can differ around seasonal transitions. Seven-day local retention is configured. Off-host encrypted backup storage is **not configured** and same-disk backups do not protect against NUC loss.
+
+## Local development remains separate
+
+The root [README](../README.md) documents JDK 25 selection, ignored `.env`, local PostgreSQL on 54328, Java on 8080 and Vite on 5175. Compose's `.env` is not automatically exported to Java: source it explicitly. Local HTTP uses SESSION_COOKIE_SECURE=false; production forces true. Never copy production passwords into frontend VITE variables or development fixtures.
+
+Local commands from the project root:
 
 ```sh
 docker compose up -d --wait db
-docker compose ps
-docker compose logs --tail 50 db
-docker compose stop db
+set -a
+source .env
+set +a
+export JAVA_HOME="$(/usr/libexec/java_home -v 25)"
+export PATH="$JAVA_HOME/bin:$PATH"
+cd backend
+./mvnw spring-boot:run
 ```
 
-Start Java only after the database is healthy. Ctrl+C stops a foreground Java process. Stopping the database preserves its named volume. No secrets need to be printed to inspect status.
+From a second terminal use `cd frontend && npm run dev`. Change Vite's port with `-- --port 5176` or its backend target with API_PROXY_TARGET. Use a normal browser; VS Code's in-app browser previously prevented editing. Backend `/` returning 404 remains expected; the frontend is served by Vite locally and nginx in production.
 
-For an optional health outage exercise, start Java and check `/actuator/health`, stop only this project's database with `docker compose stop db`, check for 503, and bring it back with `docker compose up -d --wait db`. The same Java process should report 200 again. Use only this project directory, not another Compose stack.
+## Updates, backups and rollback
 
-## Troubleshooting
+Use the exact commands in [deploy/README.md](../deploy/README.md). Upload only Git-tracked files, preserve private remote `.env` and backups, tag app images by commit and keep prior image releases. Validate with `config --quiet` (plain config expands secrets), native builds, container health and authenticated origin checks before publication. Never rebuild over the JAR file used by a running local Java process; deployment builds happen remotely and do not touch it.
 
-- Java missing or wrong version: select JDK 25 with `JAVA_HOME`, put its `bin` first in `PATH`, and verify `./mvnw --version`.
-- Port occupied: change the appropriate `.env` port, export settings again and rerun Compose/Java; do not stop unrelated services.
-- Password missing: set it in ignored `.env` and export the file before launching Java. Compose loading it does not make it available to a separate shell process.
-- Authentication failure after editing `.env`: existing-volume credentials do not change automatically. Restore the correct settings or change the database role deliberately; do not delete the volume to bypass diagnosis.
-- Flyway migration/validation failure: inspect the error and applied versions; The current schema history has V1–V5; V5 translates built-in names without changing IDs. Do not reset the volume or edit an applied migration to bypass diagnosis. Hibernate validates the migrated schema.
-- Startup fails with a database error: check `docker compose ps`, credentials and ports. Flyway intentionally prevents startup against an inaccessible database.
-- HTTP 404 at `/`: expected. Check `/actuator/health` for operational health.
-- Health 503 after startup: inspect local logs and database state. Connection, validation and socket timeouts bound JDBC waits.
-- Testcontainers cannot find Docker: start Docker Desktop and ensure your Docker context is usable. Do not skip the tests or substitute an in-memory database.
-- Maven checksum mismatch: investigate the pinned URL/distribution; do not disable verification.
+Before a future schema change, create a backup and verify scratch restore. Code rollback uses the previous known-good image tag; a schema-incompatible rollback needs a separate recovery plan. Never reset a volume, edit applied V1–V6 migrations or restore over live records as a shortcut. Destructive recovery requires an explicit target and authorization. Keep a safe copy of production configuration/password-manager entries separately from database backups.
 
-## Logs and secrets
+The first deployment has no previous production release. If rollback is needed before publication, stop only this stack's web/backend and retain its database volume/backups for diagnosis. Existing NUC services must not be stopped to free ports or fix this app.
 
-Java writes ECS JSON logs to the terminal and PostgreSQL logs are available through Compose. Local API documentation is available at `/swagger-ui/index.html`, with OpenAPI JSON at `/v3/api-docs`. Swagger and OpenAPI now require the owner role; writes require an owner session and CSRF. Hosting remains local-only until deployment review. Dependency outages produce expected server-side diagnostic warnings, which can include stack traces. HTTP health and error responses do not expose those details. Never publish raw logs without reviewing them for sensitive information.
+## Logs and troubleshooting
 
-The implementation created an ignored local `.env` with a random password and file permissions 0600. `.env.example` contains no password. Environment configuration is adequate for this local milestone; production secret handling must be reviewed before deployment.
+Use this project's `docker compose --env-file .env -f deploy/compose.yaml ps` and bounded `logs --tail` on the NUC. Secrets can appear in expanded configuration; do not publish config, environment files, raw database dumps or unreviewed logs. Backend responses hide stack traces/internal database details; operational logs may contain diagnostics during a dependency outage.
 
-## Future deployment: not implemented or authorized
-
-Target: `puntti-urpo.iltapaska.com` on the existing Debian Intel NUC. Development uses ARM64 macOS; production images must support AMD64 Linux. Inspect existing services, Docker volumes, ports, memory, nginx and Cloudflare routing in Milestone 7 before proposing changes.
-
-Use an independent Compose stack, private database networking, dedicated persistent storage, multi-stage builds, health checks, restart policies and appropriate resource limits. Production container networking needs an explicit binding override from the local loopback default. Do not copy local host-port exposure into production unquestioningly.
-
-Two-account session authentication and owner/demo row separation are implemented locally; production configuration and access testing remain required before public access. Keep secrets outside Git. No production Docker build, nginx configuration, Cloudflare route, backup job or tested restore procedure exists yet. Local volume persistence is not a backup. Design and test backup restoration before production deployment.
-
-Do not reuse other applications' volumes or modify existing server configurations without approval. Deployment requires explicit authorization.
-
-
-## Local frontend (Milestone 5)
-
-With Java and PostgreSQL running, use `cd frontend`, `npm ci`, `npm run dev`, then open `http://127.0.0.1:5175/`. Ctrl+C stops this server independently of Java and PostgreSQL. `npm run dev -- --port 5176` changes the UI port; `API_PROXY_TARGET=http://127.0.0.1:18080 npm run dev` changes its API destination. No frontend environment variable needs credentials. Never put secrets in `VITE_*`: those values can enter public browser bundles.
-
-`npm run check` and `npm run build` validate the frontend. `npm run preview` serves the build on loopback:4173 and proxies `/api` locally. The JAR does not contain the frontend. Serving `dist/` alone does not provide an API proxy. Production nginx/API routing, HTTPS, caching and ARM64/AMD64 images remain unimplemented Milestone 7 decisions after NUC inspection and explicit approval.
-
-If the UI loads but requests fail, check Java health on 8080, the configured API proxy target and the Vite terminal. Reloading a browser cannot load new Java code: restart Java after backend changes. Do not repeat a failed POST blindly; inspect saved records first. Port conflicts must be solved by selecting a free port, not stopping unrelated applications. Use a normal browser; VS Code's in-app browser previously prevented form editing.
-
-
-## Publication readiness — checked 2026-10-22
-
-The local frontend builds and is usable against the Java API. Public hosting is not ready: authentication/account-scoping now exists, but production app images/Compose stack, nginx/API routing and tested production backup/restore procedures are still missing. The local Compose file starts only PostgreSQL; Vite dev/preview are not production hosting. Milestone 6 history/progression also remains unfinished, independently of the deployment blockers.
-
-Before publishing the app, verify production authentication/cookie/proxy configuration, inspect the NUC's services/ports/memory/storage and AMD64 requirements, prepare an isolated production stack, and validate backup restoration. Changes to existing services, Cloudflare routing and deployment need explicit authorization under AGENTS.md. No NUC inspection or infrastructure change was made during this readiness check. The current milestone work is still uncommitted; committing or publishing source is separate from deploying the application.
-
-
-## Authentication deployment requirements
-
-[AUTHENTICATION.md](AUTHENTICATION.md) documents the implemented local two-account model. The repository has no production password defaults. Provision fresh distinct production BCrypt hashes through private configuration; do not copy test fixtures or commit local credentials. Set `SESSION_COOKIE_SECURE=true`, terminate HTTPS correctly and serve UI/API under one origin. Keep the application loopback/private-network bound; do not expose the Java port or PostgreSQL around the reverse proxy. Review trusted-proxy/forwarded-header handling only after inspecting the real route.
-
-Sessions are process-local and expire after two idle hours; Java restart invalidates every session (useful for password rotation). No remember-me token, SMTP reset or public signup exists. The process-wide 20-login-attempts/minute budget limits work but can temporarily block both accounts; production should add an approved edge limit based on trusted client IP, without disabling the application control or trusting arbitrary forwarded headers. No Cloudflare changes have been made. Database backups and restores must preserve owner keys and be access-controlled; row-scoped app access is not physical database isolation or backup encryption.
+- Startup failure: check project db health and required credential hashes, not another app's database. Existing-volume database credentials do not change just because `.env` changes.
+- 401: sign in; 403 can mean demo write denial or missing/expired CSRF. Reauthenticate without automatically replaying a failed mutation.
+- Port conflict: inspect the actual owner and choose a free dedicated port; do not stop unrelated services.
+- Public failure with healthy loopback origin: inspect only this hostname's Cloudflare route/DNS/TLS and tunnel health. Do not modify global routes or extract the cloudflared service token.
+- Backup failure: inspect this project's private cron log, free disk and archive readability; preserve the last valid backup.

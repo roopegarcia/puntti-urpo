@@ -4,7 +4,7 @@ A Finnish strength-training logbook being built for daily use, Java learning and
 
 ## Current status
 
-**Milestone 5: React frontend implemented and verified locally.** Finnish exercise browsing/custom editing, workout creation and editing, set logging, optional RPE, server-derived estimates and light/dark themes are available. Basic paged workout navigation opens existing sessions; exercise history, progression charts and statistics remain Milestone 6. Two manually provisioned accounts now use session authentication: `owner` has private logging access; `demo` has read-only access to invented example records. Production deployment remains planned.
+**Milestone 5: React frontend implemented and verified locally.** Finnish exercise browsing/custom editing, workout creation and editing, set logging, optional RPE, server-derived estimates and light/dark themes are available. Basic paged workout navigation opens existing sessions; exercise history, progression charts and statistics remain Milestone 6. Two manually provisioned accounts now use session authentication: `owner` has private logging access; `demo` has read-only access to invented example records. The isolated production stack is staged and verified on the NUC; public-route completion is tracked in DEPLOYMENT.md.
 
 Build and verify a complete milestone, then review the working code and tutorial. Stop for approval between milestones; tutorial exercises do not block implementation within an approved milestone.
 
@@ -77,7 +77,7 @@ If a port is occupied, change `DB_PORT` or `SERVER_PORT` in `.env`, export the f
 
 ## Accounts
 
-Account setup is already complete on this Mac. Login details are in ignored `.env.accounts` (file permissions 0600); save them in your password manager and remove that plaintext handoff file afterward. **Never share the owner password.** The demo password opens only invented, read-only data. Account names are `owner` and `demo`; public registration and password-reset email are not implemented.
+Account setup is already complete on this Mac. Initial login details were provided in ignored `.env.accounts` (0600); if you already saved and removed it, use your password manager. Fresh production credentials are provided separately in `.env.production.accounts`. **Never share the owner password.** The demo password opens only invented, read-only data. Account names are `owner` and `demo`; public registration and password-reset email are not implemented.
 
 For a fresh checkout, follow [authentication setup](docs/AUTHENTICATION.md) before starting Java. Both BCrypt hashes are required in ignored `.env`. Local HTTP uses `SESSION_COOKIE_SECURE=false`; HTTPS production must use `true`. After changing `.env`, export it again and restart Java. Passwords are never placed in frontend environment variables or source.
 
@@ -141,7 +141,7 @@ The health endpoint reports dependency availability, not workout correctness, au
 
 ## Deployment
 
-Local only. Authentication, isolated NUC deployment, nginx, Cloudflare routing, production backups and restore testing are Milestone 7 work. The NUC must be inspected first, and deployment requires explicit authorization. Personal workout records must never be exposed in a public portfolio demo without approval.
+Deployment was explicitly authorized on 2026-10-22. The dedicated NUC stack, production nginx proxy, private networking, account isolation and local backup/restore verification are implemented; public-route status and actual checks are documented in [DEPLOYMENT.md](docs/DEPLOYMENT.md). No local workout records were imported. Off-host backup storage remains unconfigured. Personal workout records must never be exposed in a public portfolio demo without approval.
 
 ## Documentation
 

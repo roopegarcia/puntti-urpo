@@ -127,3 +127,8 @@ V6 adds `workout.owner_key` (owner/demo, non-null, indexed with history ordering
 One invented completed demo workout is inserted with its own logged exercise/set. This is versioned seed data, not copied personal history and not reset on every startup. Only read access is exposed for demo. Owner cannot read/mutate demo records through domain APIs. Owner-key columns are internal; DTOs do not expose writable ownership.
 
 The application scopes queries before accessing records. Database checks enforce allowed owner values, but PostgreSQL row-level security is not enabled; a raw database administrator can see both scopes. Backups therefore contain both scopes and require private storage. V1–V5 remain immutable and V6 upgrades in place without resetting the volume. See AUTHENTICATION.md for the full access boundary.
+
+
+## First production deployment
+
+Roope selected an empty production owner account. No local records or custom exercises are copied to the NUC. V1–V6 initialize the independent production volume, with ten Finnish built-ins and the invented demo workout. Verified owner count after disposable smoke-test cleanup is zero; demo count is one. Database restart preserved a saved disposable set before its explicit cleanup. A custom-format backup restored all six migration entries and the demo data into a separate temporary database without overwriting production. Daily local backups are scheduled; off-host disaster-recovery storage remains unconfigured.

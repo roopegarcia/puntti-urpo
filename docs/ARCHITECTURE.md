@@ -105,3 +105,19 @@ The proxy is development infrastructure, not a new domain layer. Production rout
 React `AuthGate` loads identity before mounting data screens, sends session-backed CSRF headers for writes, refreshes tokens after login/logout, and clears private UI on logout/account change. An expired session hides the mounted App behind reauthentication so same-account unsaved drafts can survive; no write is automatically retried. Different accounts remount App. Demo UI disables/hides mutation controls, but actual enforcement is in Spring Security and account-scoped repository access.
 
 The requested two accounts use one application/database with explicit row scoping. This differs from the earlier suggested separate deployment/database demo: it reduces local/NUC process overhead, but both accounts share the service/database blast radius. Separate deployments remain a stronger future deployment option. See AUTHENTICATION.md for limits and verification.
+
+
+## Authorized production stack
+
+The deployment uses the same React and Java source in pinned multi-stage images, built natively on the AMD64 NUC. Cloudflare Tunnel routes the dedicated hostname to nginx on loopback:8106; nginx serves static frontend assets and proxies `/api` to the private backend. The backend reaches only this stack's PostgreSQL service/volume. Resource caps, read-only application roots, health gates and rotated logs bound the new stack's impact on shared infrastructure. Local ARM64 development remains separate. Publication status and exact measurements are in DEPLOYMENT.md; operational commands/rollback are in deploy/README.md.
+
+```mermaid
+flowchart LR
+    Browser[HTTPS browser] --> CF[Cloudflare Tunnel]
+    CF --> Nginx[Loopback nginx 8106]
+    Nginx --> Static[Built React files]
+    Nginx --> Java[Private Java container]
+    Java --> PG[(Dedicated PostgreSQL volume)]
+    PG --> Backup[Private custom-format backups]
+    Backup --> Scratch[Temporary restore verification database]
+```

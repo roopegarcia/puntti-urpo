@@ -257,3 +257,27 @@ Compatibility references: [Spring SQL/JPA documentation](https://docs.spring.io/
 **Reasoning:** matches the two-account request and is understandable as a conventional Spring filter/service/repository boundary. No signup, mail service, token refresh protocol or additional identity provider is needed. No plaintext password or hash is committed; local setup generates a private handoff file and ignored environment hashes. Session cookies default Secure/HttpOnly/SameSite=Strict, with an explicit local HTTP override.
 
 **Trade-offs:** one application/database shares infrastructure and service blast radius; this is weaker physical separation than the earlier separate-stack suggestion. Fixed keys/check constraints intentionally do not support arbitrary future users. Supporting additional writable users requires a deliberate account/domain migration and per-user catalogue uniqueness policy. Sessions are process-local and invalidate on restart; password recovery uses trusted host configuration. The process-wide login budget is bounded but can temporarily delay both users and needs complementary production proxy controls. Production HTTPS/routing/backups/NUC review remain separate.
+
+## 2026-10-22 — Native AMD64 build and isolated production origin
+
+**Context:** Roope authorized commit/push/deployment on a shared Intel NUC after local owner/demo verification. Inspection found approximately 4.3 GiB available RAM, 171 GiB free disk and loopback 8106 unused. The user selected an empty production owner account.
+
+**Options:** build Intel images under emulation on the ARM64 Mac, copy a local JAR, or build pinned multi-stage images natively on the NUC; reuse existing infrastructure or create a dedicated Compose stack.
+
+**Choice:** native AMD64 build from Git-tracked source using pinned official Temurin/Node/nginx/PostgreSQL manifests. Dedicated puntti-urpo-production project, loopback nginx:8106, private backend/db network and independent volume, explicit resource/privilege/log limits. Fresh production credentials are privately provisioned; no local data import. Existing cloudflared handles only a newly approved hostname route; no unrelated services/configuration are changed.
+
+**Reasoning:** native builds avoid cross-architecture emulation and keep the runtime reproducible. The new app adds approximately 340 MiB measured steady memory within configured caps. Same-origin API routing supports secure sessions and requires no browser CORS widening. The backend image's build stage explicitly installs unzip so the script-only wrapper selects its checksum-pinned ZIP; Apache SHA-512 and pinned SHA-256 were independently verified after discovering automatic tarball fallback in the minimal image.
+
+**Trade-offs:** Maven/npm dependencies still download during the first native build; image pinning requires intentional security updates. The shared NUC remains a shared host failure domain. Runtime images omit build tools and tests; local test suites plus real origin smoke checks provide separate evidence. The first deployment has no prior release for code rollback. Secure cookies require public HTTPS even though the tunnel origin is loopback HTTP.
+
+## 2026-10-22 — Private backup archive and non-destructive restore proof
+
+**Context:** volume persistence alone does not prove recoverability; other NUC applications must not be touched.
+
+**Options:** rely on the volume, overwrite the live database during a restore drill, or restore a custom-format archive into a dedicated scratch database.
+
+**Choice:** private pg_dump custom archives, seven-day local retention and a daily job preserving existing crontab entries. Verify restore through a uniquely named temporary database in only this app's PostgreSQL container; install cleanup only after successful scratch creation and drop only that scratch database. Separate secrets remain in private configuration/password-manager storage.
+
+**Reasoning:** proves archive readability and restoration without replacing production records or allocating another persistent stack. Initial verification restored all six migrations and the demo session. A restart-persistence test used and removed only a named disposable owner workout.
+
+**Trade-offs:** local backups do not survive host/disk loss. An encrypted off-host destination/schedule is not configured automatically. The restore drill proves database restoration, not full disaster recovery or arbitrary future migration rollback. Destructive recovery requires explicit target approval.
