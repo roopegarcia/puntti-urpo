@@ -1,6 +1,8 @@
 package com.punttiurpo.mapper;
 
 import java.util.List;
+import com.punttiurpo.domain.TrainingCalculations;
+import com.punttiurpo.entity.WorkoutSetType;
 import com.punttiurpo.dto.WorkoutExerciseResponse;
 import com.punttiurpo.dto.WorkoutResponse;
 import com.punttiurpo.dto.WorkoutSetResponse;
@@ -20,7 +22,9 @@ public final class WorkoutMapper {
 
     public static WorkoutSetResponse set(WorkoutSet set) {
         return new WorkoutSetResponse(set.getId(), set.getSetOrder(), set.getWeightKg(),
-                set.getRepetitions(), set.getRpe(), set.getSetType(), set.isCompleted());
+                set.getRepetitions(), set.getRpe(), set.getSetType(), set.isCompleted(),
+                TrainingCalculations.calculate(set.getWeightKg(), set.getRepetitions(), set.getRpe(),
+                        set.isCompleted(), set.getSetType() == WorkoutSetType.WORKING));
     }
 
     public static WorkoutExerciseResponse exercise(WorkoutExercise exercise, List<WorkoutSetResponse> sets) {

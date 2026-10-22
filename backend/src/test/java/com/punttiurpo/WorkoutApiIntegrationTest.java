@@ -217,6 +217,58 @@ class WorkoutApiIntegrationTest {
         assertThat(paths.path("/api/sets/{id}").has("put")).isTrue();
     }
 
+    @Test
+    void derivedEstimatesAgreeAcrossWriteReadAndNestedResponsesAndRefreshAfterUpdates() throws Exception {
+        String workout = createWorkout("2026-10-22");
+        long exercise = addExercise(workout);
+        var created = send("POST", "/api/workout-exercises/" + exercise + "/sets", """
+                {"weightKg":82.25,"repetitions":6,"rpe":8.5,"completed":true}
+                """);
+        var estimates = body(created, 201).path("estimates");
+        assertThat(estimates.path("estimatedRir").decimalValue()).isEqualByComparingTo("1.5");
+        assertThat(estimates.path("repetitionBasedE1rmKg").decimalValue()).isEqualByComparingTo("98.70");
+        assertThat(estimates.path("e1rmStatus").asText()).isEqualTo("AVAILABLE");
+        assertThat(estimates.path("warnings").get(0).asText()).isEqualTo("SUBMAXIMAL_RPE_NOT_ADJUSTED");
+        String location = created.headers().firstValue("Location").orElseThrow();
+        assertThat(body(send("GET", location, null), 200).path("estimates")).isEqualTo(estimates);
+        assertThat(body(send("GET", workout, null), 200).path("exercises").get(0)
+                .path("sets").get(0).path("estimates")).isEqualTo(estimates);
+        assertThat(body(send("GET", "/api/workout-exercises/" + exercise, null), 200)
+                .path("sets").get(0).path("estimates")).isEqualTo(estimates);
+
+        var changed = body(send("PUT", location, """
+                {"weightKg":82.25,"repetitions":11,"rpe":10,"completed":true}
+                """), 200).path("estimates");
+        assertThat(changed.path("repetitionBasedE1rmKg").isNull()).isTrue();
+        assertThat(changed.path("e1rmStatus").asText()).isEqualTo("UNSUPPORTED_REPETITIONS");
+        assertThat(changed.path("estimatedRir").decimalValue()).isEqualByComparingTo("0.0");
+        var draft = body(send("PUT", location, "{}"), 200).path("estimates");
+        assertThat(draft.path("estimatedRir").isNull()).isTrue();
+        assertThat(draft.path("repetitionBasedE1rmKg").isNull()).isTrue();
+        assertThat(draft.path("e1rmStatus").asText()).isEqualTo("NOT_COMPLETED");
+    }
+
+    @Test
+    void warmupsUnknownEffortAndSinglesKeepTheirLimitationsInTheApi() throws Exception {
+        String workout = createWorkout("2026-10-22");
+        String path = "/api/workout-exercises/" + addExercise(workout) + "/sets";
+        var warmup = body(send("POST", path, """
+                {"weightKg":70,"repetitions":5,"rpe":9,"setType":"WARMUP","completed":true}
+                """), 201).path("estimates");
+        assertThat(warmup.path("estimatedRir").decimalValue()).isEqualByComparingTo("1");
+        assertThat(warmup.path("repetitionBasedE1rmKg").isNull()).isTrue();
+        assertThat(warmup.path("e1rmStatus").asText()).isEqualTo("NOT_WORKING_SET");
+        var unknown = body(send("POST", path, "{\"weightKg\":70,\"repetitions\":5,\"completed\":true}"), 201).path("estimates");
+        assertThat(unknown.path("estimatedRir").isNull()).isTrue();
+        assertThat(unknown.path("repetitionBasedE1rmKg").decimalValue()).isEqualByComparingTo("81.67");
+        assertThat(unknown.path("warnings").get(0).asText()).isEqualTo("RPE_NOT_RECORDED");
+        var single = body(send("POST", path, "{\"weightKg\":70,\"repetitions\":1,\"rpe\":10,\"completed\":true}"), 201).path("estimates");
+        assertThat(single.path("repetitionBasedE1rmKg").decimalValue()).isEqualByComparingTo("70");
+        assertThat(single.path("warnings").get(0).asText()).isEqualTo("SINGLE_REPETITION_NOT_VERIFIED_MAXIMUM");
+        var zeroLoad = body(send("POST", path, "{\"weightKg\":0,\"repetitions\":5,\"completed\":true}"), 201).path("estimates");
+        assertThat(zeroLoad.path("e1rmStatus").asText()).isEqualTo("NO_POSITIVE_LOAD");
+    }
+
     private String createWorkout(String date) throws Exception {
         var response = send("POST", "/api/workouts", "{\"date\":\"" + date + "\"}");
         body(response, 201);

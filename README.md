@@ -4,7 +4,7 @@ A Finnish strength-training logbook being built for daily use, Java learning and
 
 ## Current status
 
-**Milestone 3: Workout domain implemented; validation evidence is in the learning log.** The local REST API supports the ten requested built-in exercises, custom exercises, workout creation/history summaries, ordered logged exercises and draft/completed sets. Workouts, logged exercises and sets can be read, edited and deleted with explicit cascade boundaries. No frontend, authentication, progression statistics, RIR or estimated 1RM calculations exist yet.
+**Milestone 4: RPE/RIR and repetition-based e1RM implemented and verified.** The local API supports the ten requested exercises, workout logging and read-only per-set estimates. Completed sets can show approximate RIR; eligible completed working sets can show a clearly labelled repetition-based Epley estimate with availability reasons and effort warnings. No frontend, authentication, RPE-adjusted maximum or progression statistics exist yet.
 
 Build and verify a complete milestone, then review the working code and tutorial. Stop for approval between milestones; tutorial exercises do not block implementation within an approved milestone.
 
@@ -102,6 +102,8 @@ The Compose database has its own `puntti-urpo_postgres_data` volume. Stop/start 
 
 Use `/api/exercises?q=bench` for search, `/api/workouts` for workout summaries, `/v3/api-docs` for OpenAPI JSON and `/swagger-ui/index.html` for interactive API documentation. See [API documentation](docs/API.md) for POST/PUT/DELETE payloads, a copyable workout logging sequence, pagination, errors and limits. Write operations are local-only and have no per-user ownership yet.
 
+Set responses now contain read-only `estimates`; see [calculation policy](docs/CALCULATIONS.md). Existing rows need no schema change or backfill. An e1RM estimate is not a measured maximum or personal record.
+
 The health endpoint reports dependency availability, not workout correctness, authentication or backup readiness. A database failure during startup prevents the application from starting because Flyway requires a connection; a later failure returns HTTP 503 while the process remains alive.
 
 ## Deployment
@@ -113,6 +115,7 @@ Local only. Authentication, isolated NUC deployment, nginx, Cloudflare routing, 
 - [Java for Roope](docs/JAVA-FOR-ROOPE.md): progressive tutorial using actual source.
 - [Architecture](docs/ARCHITECTURE.md): components, request flow and planned layers.
 - [Database](docs/DATABASE.md): storage, migrations and future modeling.
+- [Calculation policy and research](docs/CALCULATIONS.md): formulas, precision, availability, warnings and a separate unimplemented RPE-aware candidate.
 - [API](docs/API.md): current HTTP contract.
 - [Deployment](docs/DEPLOYMENT.md): local operation and deployment constraints.
 - [Decisions](docs/DECISIONS.md): options, reasoning and trade-offs.

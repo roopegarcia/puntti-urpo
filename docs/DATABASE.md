@@ -53,7 +53,7 @@ erDiagram
 
 The unique expression index `exercise_name_unique` on `lower(name)` prevents case-only duplicates across custom and built-in records, including racing inserts or updates. CHECK constraints reject empty/space-only names and surrounding ordinary spaces. API normalization/Bean Validation additionally handle Java whitespace and input length before persistence. SQL varchar lengths and checks are authoritative database constraints; the API can be stricter. Search uses a parameterized JPQL literal substring (`locate`), so user input cannot become SQL or LIKE wildcards. The small catalogue does not need a trigram/full-text index yet; the uniqueness index is not a substring-search optimization.
 
-`custom=false` marks the ten requested built-in exercises; API creates always set true and updates cannot change this field. The service rejects edits to built-ins. This is application-level catalogue protection, not a database permission system or per-user authorization. Metadata is nullable free text. Workout foreign keys, explicit cascades and logging APIs now exist; decimal-based RIR/e1RM calculations remain Milestone 4 work.
+`custom=false` marks the ten requested built-in exercises; API creates always set true and updates cannot change this field. The service rejects edits to built-ins. This is application-level catalogue protection, not a database permission system or per-user authorization. Metadata is nullable free text. Workout foreign keys, explicit cascades and logging APIs now exist; Milestone 4 calculates read-only RIR/repetition-based e1RM without changing schema.
 
 ## Migrations and JPA validation
 
@@ -96,8 +96,13 @@ JPA mappings are unidirectional and have no cascade-remove annotations or parent
 
 `weight_kg` is nullable `numeric(6,2)`, mapped to BigDecimal: 0–9999.99 and at most two decimal places through the API. `rpe` is nullable `numeric(3,1)`, restricted to 6–10 in exact half-point increments. Repetitions are nullable integers in 0–1000. A CHECK requires non-null weight and positive repetitions when completed is true. Draft sets may remain incomplete. Enum set type is stored as WARMUP/WORKING text, never a fragile ordinal.
 
-Bean Validation rejects excess decimal places before database storage. PostgreSQL numeric coercion can round values supplied by direct administrative SQL, so direct writers must honor the same precision contract. There is no binary floating-point conversion in the application. RPE is subjective; no RIR/e1RM calculation or performance classification is implemented in Milestone 3.
+Bean Validation rejects excess decimal places before database storage. PostgreSQL numeric coercion can round values supplied by direct administrative SQL, so direct writers must honor the same precision contract. There is no binary floating-point conversion in the application. RPE is subjective; Milestone 3 stored these observations; Milestone 4 now derives approximate RIR and repetition-based e1RM without rewriting rows or claiming measured performance.
 
 Training `date` maps to LocalDate independently of server timezone. Optional started/ended timestamps map to Instant and `timestamp with time zone`; the end requires a start and cannot be earlier. PostgreSQL preserves an instant, not the original offset/timezone string. Normal PostgreSQL timestamp precision is microseconds; do not rely on nanosecond round trips.
 
 Nested workout reads load catalogue details with an entity graph and all workout sets in one query, then group sets by logged-exercise ID. The service assembles DTOs inside its transaction with OSIV disabled. Current catalogue names are shown through references; there is no historical name snapshot. Concurrent editing is last successful write wins, with database constraints enforcing integrity; optimistic versioning is not implemented.
+
+
+## Derived values are not persisted
+
+Milestone 4 adds no migration or column. RIR and repetition-based e1RM are computed from recorded values at response-mapping time. The Flyway history remains V1–V4. There are no caches or formula-version backfills to maintain at this stage. Editing a set changes its derived response immediately. Raw kg/repetitions/RPE/completion stay the source data; unavailable estimates remain null rather than being stored as zero.

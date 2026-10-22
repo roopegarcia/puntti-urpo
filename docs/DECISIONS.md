@@ -171,3 +171,39 @@ Compatibility references: [Spring SQL/JPA documentation](https://docs.spring.io/
 **Reasoning:** supports logging and editing without an arbitrary general CRUD abstraction or a premature reorder protocol. Full replacement follows the exercise API convention.
 
 **Trade-offs:** concurrent appends can conflict and require a client retry; there is no atomic swap/reorder-all endpoint, optimistic locking or soft delete. Catalogue reference changes require removing/re-adding a logged entry. No new formula, progression chart, frontend or deployment is included.
+
+## 2026-10-22 — Derived set estimates without schema changes
+
+**Context:** Milestone 4 must calculate RIR/e1RM while keeping recorded performance distinct from predictions and persistence code.
+
+**Options:** persist/update estimates in every write path, add a calculation endpoint, or derive a nested response value through one mapper path.
+
+**Choice:** pure `domain/TrainingCalculations` scalar functions return immutable `domain/SetEstimates`; WorkoutMapper adds that read-only result to all set responses. No entities, repositories, Spring or external services enter the calculator. No migration, cache, endpoint, backfill or new dependency is added.
+
+**Reasoning:** a single response-mapping path keeps creation, updates, single reads and nested reads consistent. Existing sets gain current derived values without rewriting user data.
+
+**Trade-offs:** API responses gain an additive object. Derived values are computed on read, not stored historical predictions; a future formula revision must preserve clear method semantics rather than silently treating old observations as measured records. Structured status/warning codes need Finnish rendering in the frontend milestone.
+
+## 2026-10-22 — Approximate RIR and explicitly unadjusted Epley
+
+**Context:** RPE expresses subjective effort; a completed set below maximal effort must not silently be treated as an objectively maximal attempt.
+
+**Options:** assume missing RPE means maximal effort, adjust repetitions using inferred RIR immediately, or retain an explicitly repetition-based estimate with effort warnings.
+
+**Choice:** completed-set RIR is the conventional `10 − RPE` approximation on the supported half-step 6–10 scale; missing effort/drafts yield null. e1RM uses the approved Epley formula from kg and completed reps only. A recorded RPE below 10 adds a submaximal-not-adjusted warning; absent RPE adds an unknown-effort warning. One repetition returns its recorded load with an always-present not-verified-maximum warning. No RPE-adjusted estimate is implemented.
+
+**Reasoning:** preserves the limited meaning of the observed set and makes the distinction visible in API fields and Swagger descriptions. The single-rep rule is an explicit product convention, not proof that any recorded single was maximal.
+
+**Trade-offs:** submaximal sets still have a numerical repetition-based value when otherwise eligible, but it must not be presented as a measured or RPE-adjusted maximum. RIR remains subjective even when the arithmetic is exact. CALCULATIONS.md documents sources, limitations and a separate RPE-aware candidate as an unvalidated inference requiring further validation before any implementation.
+
+## 2026-10-22 — Eligibility, reasons and final-only decimal rounding
+
+**Context:** zero-load, draft, warmup and high-repetition sets may be valid logs but unsuitable for the initial estimate policy.
+
+**Options:** emit a number for every log, use zero to mean unavailable, or return null with explicit eligibility reasons.
+
+**Choice:** e1RM requires completed WORKING sets, positive load and 1–10 repetitions. Exclusion precedence is NOT_COMPLETED → NOT_WORKING_SET → NO_POSITIVE_LOAD → UNSUPPORTED_REPETITIONS. Return null with the first reason; allow completed-set RIR independently. Use BigDecimal `weight × (30 + reps) / 30`, rounding only final kg to two decimal places with HALF_UP. Singles use the recorded load.
+
+**Reasoning:** prevents missing/unfit values from looking like zero strength, bounds the initial repetition range and avoids premature division rounding. AVAILABLE means policy eligibility, not universal exercise validity. The cutoff/warmup rule is a conservative product choice; no blanket exercise-specific scientific validation is claimed.
+
+**Trade-offs:** sets over 10 reps still store normally but do not contribute an e1RM through this policy. Machine/cable and dumbbell conventions remain exercise/equipment dependent. Two-decimal output precision does not represent prediction accuracy. Pure parameterized tests cover all supported RPE steps, numerical/eligibility boundaries and rounding; HTTP/database tests verify consistent serialization and recalculation.

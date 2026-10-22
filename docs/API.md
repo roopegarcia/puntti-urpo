@@ -89,7 +89,7 @@ Flyway requires a working database at startup. Initial connection/migration fail
 
 # Workout logging API (Milestone 3)
 
-These endpoints remain local-only and unauthenticated. They record data; RIR/e1RM and progression calculations are not implemented. PUT replaces editable fields rather than patching individual fields.
+These endpoints remain local-only and unauthenticated. They record data and now include Milestone 4 read-only per-set RIR/repetition-based e1RM estimates; progression statistics are not implemented. PUT replaces editable fields rather than patching individual fields.
 
 ## A first workout through Swagger
 
@@ -143,6 +143,30 @@ Orders are unique within a parent. Gaps are valid and deletion does not renumber
 
 Fields: `setOrder` integer 0–1,000,000 (unique per logged exercise); `weightKg` exact decimal 0–9999.99 with at most two decimal places; `repetitions` integer 0–1000 for drafts, 1–1000 when completed; optional `rpe` 6–10 in 0.5 steps (at most one decimal); `setType` WARMUP or WORKING (default); `completed` defaults false if omitted or null. Drafts may omit weight/repetitions. Completed sets must supply both. Zero weight is allowed. Numeric strings are not part of the contract; use JSON numbers.
 
-RPE is a subjective exertion entry, not measured performance. Weight is recorded exactly as entered in kg; there is no automatic per-hand multiplication for dumbbells. RIR and maximum/volume calculations are deferred to Milestone 4 and later metrics work. Changing a custom catalogue name changes the name shown for its references; no historical name snapshot is stored.
+RPE is a subjective exertion entry, not measured performance. Weight is recorded exactly as entered in kg; there is no automatic per-hand multiplication for dumbbells. Milestone 4 now derives approximate RIR and repetition-based e1RM; RPE-adjusted maxima and volume/progression aggregation remain unimplemented. Changing a custom catalogue name changes the name shown for its references; no historical name snapshot is stored.
 
 Validation violations, invalid timestamps/enum values and incomplete completed sets return 400. Missing workout/entry/set or catalogue IDs return 404. Duplicate sibling order or database integrity conflicts return 409 with no partial update. Delete endpoints are actual data deletion, with no undo/trash system; use disposable workouts for testing. Authentication/ownership checks remain required before exposing any of this beyond loopback.
+
+
+# Derived set estimates (Milestone 4)
+
+POST/PUT/GET set responses and nested workout/logged-exercise reads now include an additive read-only `estimates` object. Request payloads and existing fields are unchanged. For a completed WORKING set of 82.25 kg × 6, RPE 8.5:
+
+```json
+{
+  "estimatedRir": 1.5,
+  "repetitionBasedE1rmKg": 98.70,
+  "e1rmStatus": "AVAILABLE",
+  "warnings": ["SUBMAXIMAL_RPE_NOT_ADJUSTED"]
+}
+```
+
+Estimated RIR is the conventional subjective approximation 10 − RPE, shown only for completed sets with recorded RPE; missing effort and drafts return null. RIR is independent of e1RM eligibility.
+
+The e1RM method is Epley using kg and completed repetitions only, never RPE-adjusted. It is available only for completed WORKING sets with positive load and 1–10 reps. A single uses its recorded load, with `SINGLE_REPETITION_NOT_VERIFIED_MAXIMUM`. Final kg rounding is two decimal places, HALF_UP. Missing RPE produces `RPE_NOT_RECORDED`; RPE below 10 produces `SUBMAXIMAL_RPE_NOT_ADJUSTED`. Neither warning changes the arithmetic.
+
+Unavailable e1RM is null, with first-applicable reason `NOT_COMPLETED`, `NOT_WORKING_SET`, `NO_POSITIVE_LOAD` or `UNSUPPORTED_REPETITIONS`, in that order. High-repetition or zero-load sets remain valid records. They may still have estimated RIR if completed and RPE is present. AVAILABLE is an arithmetic eligibility status, not proof of validity for that exercise, effort, equipment or person.
+
+Use the Finnish label “Toistomäärään perustuva e1RM-arvio (ei RPE-korjattu)”; never label it as a measured maximum or record. The Swagger request schema explains the RPE scale and the response schema describes the estimate limitations. Numeric JSON formatting may omit trailing zeros; clients should format kg for display without treating decimal places as prediction accuracy.
+
+No new endpoint, database column or migration is required. Existing sets calculate on read, and updates refresh estimates immediately. [CALCULATIONS.md](CALCULATIONS.md) defines the exact policy, restrictions and separately documented RPE-aware research candidate (not implemented).

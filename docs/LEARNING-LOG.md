@@ -1,5 +1,65 @@
 # Learning log
 
+## 2026-10-22 — Milestone 4 complete: RPE/RIR and repetition-based e1RM
+
+**Authorization and commit:** Roope explicitly approved committing the previous milestones and proceeding. Milestones 2–3 are now local commit `5cd7805` (`Complete exercise catalogue and workout logging milestones`), following Milestone 1 commit `34a5e14`. Milestone 4 changes remain uncommitted for review. Nothing was pushed or deployed.
+
+**Built:** pure BigDecimal domain calculations returning an immutable result with explicit availability/status/warning codes. Completed-set RIR uses the conventional subjective 10 − RPE approximation; eligible completed working sets use repetition-based Epley with a recorded-load single-rep convention. One response-mapper path supplies additive read-only estimates on creation, replacement, single and nested reads. No migration, backfill, calculation endpoint, cache or new dependency was needed.
+
+**Policy and limits:** e1RM requires positive load and 1–10 repetitions on completed WORKING sets. Missing/ineligible values are null with a reason rather than zero. RIR is independently available for completed sets with recorded RPE. Submaximal/unknown effort and unverified singles have visible warning codes. RPE does not change the Epley value. Final-only kg rounding is two decimals, HALF_UP. Arithmetic eligibility is not exercise/person validation or a measured record. CALCULATIONS.md documents primary research sources, applicability and a separate RPE-aware candidate as an unimplemented inference, not a validated model.
+
+**Java concepts added:** pure functions, scalar/domain boundaries, exact multiplication/division with explicit rounding, Optional versus nullable serialized fields, immutable record collection copying, enum statuses/warnings, and JUnit parameterized input sources. Tutorial chapters 31–35 cite actual code.
+
+**What confused Roope:** not yet discussed; no Java understanding is assumed or claimed. The working milestone is complete before tutorial review, following the agreed learning workflow.
+
+**Actual verification:**
+
+- `./mvnw -B -ntp verify`: BUILD SUCCESS; 67 tests/cases, zero failures/errors/skips, confirmed from eight XML reports. 44 unit/parameterized and 23 PostgreSQL/integration cases.
+- 36 pure calculation cases covered all nine RPE steps, missing/invalid effort, single/ten/eleven-rep boundaries, nullable/zero/negative load and missing reps, large input values, final rounding and half-way behavior. Submaximal and maximal-reported RPE produce the same Epley value but different RIR/warnings.
+- Two added HTTP/PostgreSQL tests checked POST/PUT/GET and nested-read agreement, updated/draft availability, warmup exclusion, unknown-effort/single warnings and zero-load handling.
+- Packaged JAR started against the existing database, returned RIR 1.5 and repetition-based e1RM 98.70 kg for 82.25 kg × 6 at RPE 8.5, with SUBMAXIMAL_RPE_NOT_ADJUSTED. Nested detail matched the standalone response.
+- Editing to 11 reps produced null e1RM with UNSUPPORTED_REPETITIONS while retaining estimated RIR 0 at RPE 10. OpenAPI exposed the new result fields and warning codes.
+- Fingerprints of every pre-existing row in all four domain tables matched after removing only the disposable verification workout. Flyway history remained four applied migrations. No observations, custom exercises or schema were rewritten.
+- Only the independently launched verification JAR was stopped; the user's existing database/application were left running. Restart the user-run application to load the new response fields.
+- `git diff --check`, authored whitespace, local Markdown links, XML report and credential-exclusion checks passed. No local password appeared in Git-visible files or validation logs.
+
+**Added files:**
+
+- `backend/src/main/java/com/punttiurpo/domain/SetEstimates.java`
+- `backend/src/main/java/com/punttiurpo/domain/TrainingCalculations.java`
+- `backend/src/test/java/com/punttiurpo/domain/TrainingCalculationsTest.java`
+- `docs/CALCULATIONS.md`
+
+**Updated files:**
+
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `README.md`
+- `backend/src/main/java/com/punttiurpo/dto/WorkoutSetRequest.java`
+- `backend/src/main/java/com/punttiurpo/dto/WorkoutSetResponse.java`
+- `backend/src/main/java/com/punttiurpo/mapper/WorkoutMapper.java`
+- `backend/src/test/java/com/punttiurpo/WorkoutApiIntegrationTest.java`
+- `docs/API.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DATABASE.md`
+- `docs/DECISIONS.md`
+- `docs/JAVA-FOR-ROOPE.md`
+- `docs/LEARNING-LOG.md`
+
+**What Roope should be able to explain after studying:** why calculations are separate from persistence, why rounding is final-only, how null/zero/unavailable differ, why subjective RPE does not silently turn a repetition estimate into a measured maximum, and what the unit/integration tests do and do not prove.
+
+**Three questions for later:**
+
+1. Why multiply before dividing and round only the final kg result?
+2. How do missing RIR, zero RIR and unavailable e1RM differ?
+3. Why does RPE change warnings/RIR but not the implemented Epley estimate?
+
+**Suggested exercise:** compare a disposable completed 100 kg × 6 set at RPE 8.5 and 10, an 11-rep set and a draft. Explain the numeric values/status/warnings from the pure function, then remove only that disposable workout.
+
+**Review state:** Milestone 4 implemented and verified. Stop before Milestone 5 (React frontend) until approved. No RPE-adjusted estimate was implemented.
+
+---
+
 ## 2026-10-22 — Milestone 3 complete: workout domain and exact requested catalogue
 
 **Authorization:** Roope requested the ten exact English exercise names and explicitly selected “Update catalogue and implement Milestone 3.” The normal browser resolved Swagger request editing; use a normal browser instead of the VS Code in-app browser for these exercises. Stop before Milestone 4 until approved.

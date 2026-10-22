@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Milestone 4 — RPE/RIR and repetition-based e1RM (2026-10-22)
+
+- Added pure BigDecimal training calculations and immutable derived-result/status/warning types, separated from entities and persistence.
+- Added completed-set approximate RIR and eligible-set Epley estimates with explicit unavailable reasons, effort warnings and a documented single-repetition convention.
+- Added read-only `estimates` to all set responses, including nested workout/entry reads; existing records require no migration or backfill.
+- Added all supported RPE-step, invalid-input, precision/rounding and eligibility tests; added HTTP/PostgreSQL coverage for consistent responses and refreshed results after updates.
+- Extended Swagger descriptions, calculation policy/research, tutorial and technical documentation. RPE-aware estimation is documented separately and remains unimplemented.
+
 ### Milestone 3 — workout domain and requested catalogue (2026-10-22)
 
 - Added V3 to use the ten exact requested English exercise names, preserving equivalent IDs and all custom exercise rows.

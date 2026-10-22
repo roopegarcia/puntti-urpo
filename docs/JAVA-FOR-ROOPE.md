@@ -1,6 +1,6 @@
 # Java for Roope
 
-This tutorial grows with Puntti-Urpo. You already know PHP, JavaScript, SQL and web development; the aim is to connect that experience to Java without hiding how the application works. Exercises are optional experiments: restore changes after trying them. Understanding has not yet been assessed. Milestones 1, 2 and 3 are implemented; study them at your own pace. The sections follow the order concepts were introduced. Sections 1–6 introduce the original startup foundation; sections 7 onward explain the database, health checks and tests added afterward. Follow the README database/environment setup before running the application examples below.
+This tutorial grows with Puntti-Urpo. You already know PHP, JavaScript, SQL and web development; the aim is to connect that experience to Java without hiding how the application works. Exercises are optional experiments: restore changes after trying them. Understanding has not yet been assessed. Milestones 1–4 are implemented; study them at your own pace. The sections follow the order concepts were introduced. Sections 1–6 introduce the original startup foundation; sections 7 onward explain the database, health checks and tests added afterward. Follow the README database/environment setup before running the application examples below.
 
 ## 1. Java, the JVM and the JDK
 
@@ -220,7 +220,7 @@ The PostgreSQL container uses `withUrlParam` for JDBC timeout parameters. That A
 
 **Exercise:** stop this project's Compose database, leave Docker Desktop running, and run `./mvnw verify` from `backend/`.
 
-**Verify (current Milestone 3):** all twenty-nine tests pass. This demonstrates test isolation from the Compose database. A successful test build creates the executable JAR too.
+**Verify (current Milestone 4):** all 67 tests pass. This demonstrates test isolation from the Compose database. A successful test build creates the executable JAR too.
 
 ## 11. Dependency injection in the test context
 
@@ -467,7 +467,7 @@ The HTTP integration suite starts real PostgreSQL and checks creation/read/repla
 
 **Exercise:** run `./mvnw -Dtest=ExerciseServiceTest,ExerciseRequestTest test` without needing Docker, then run `./mvnw verify` with Docker running.
 
-**Verify:** five focused unit tests pass; current full verification runs twenty-nine tests across seven classes and packages the application. Current features, including the later workout domain, remain backend-only; there is no gym UI yet.
+**Verify:** five focused unit tests pass; current full verification runs 67 tests across eight classes and packages the application. Current features, including the later workout domain, remain backend-only; there is no gym UI yet.
 
 ## Milestone 2 review questions and exercise
 
@@ -535,7 +535,7 @@ This checks whether the entered RPE is an exact multiple of 0.5. It is validatio
 
 **Exercise:** submit a completed set with weight 82.25, six repetitions and RPE 8.5. Then try RPE 8.2 and weight 82.251.
 
-**Verify:** the first persists exactly and the latter two return 400. GET the accepted set and inspect the decimal values. RIR and e1RM are intentionally not present yet.
+**Verify:** the first persists exactly and the latter two return 400. GET the accepted set and inspect the decimal values. Milestone 4 now exposes both derived fields; they are explained in chapters 31–35 below.
 
 ## 26. Date-only values, instants and time validation
 
@@ -611,7 +611,7 @@ Unit tests check cross-field rules before repository calls. They do not claim to
 
 **Exercise:** run `./mvnw -Dtest=WorkoutServiceTest test`, then `./mvnw verify` with Docker running.
 
-**Verify:** three focused workout unit tests pass; full verification runs 29 tests across seven classes (eight unit, 21 database/integration). The packaged JAR can then be started using the README setup.
+**Verify:** three focused workout unit tests pass; current full verification runs 67 tests across eight classes (44 unit/parameterized, 23 database/integration). The packaged JAR can then be started using the README setup.
 
 ## Milestone 3 review questions and exercise
 
@@ -619,4 +619,95 @@ Unit tests check cross-field rules before repository calls. They do not claim to
 2. What is the difference between PostgreSQL ON DELETE CASCADE and JPA cascade/orphan-removal behavior in our code?
 3. Why do set inputs use BigDecimal and a nullable completion input, while persisted completion is a non-null boolean?
 
-Suggested exercise: create a disposable workout through Swagger, add two requested exercises, prepare a draft set, complete it, inspect the nested detail and provoke an occupied-order conflict. Remove only your disposable workout and verify catalogue exercises remain. Study the completed milestone before the next one; RIR/e1RM calculations are Milestone 4 and require approval before implementation.
+Suggested exercise: create a disposable workout through Swagger, add two requested exercises, prepare a draft set, complete it, inspect the nested detail and provoke an occupied-order conflict. Remove only your disposable workout and verify catalogue exercises remain. This completed the Milestone 3 review. Milestone 4 was subsequently approved and its RIR/e1RM implementation is explained in the following chapters.
+
+# Milestone 4: pure calculations and honest estimates
+
+## 31. A pure domain function instead of another persistence service
+
+Sources: `backend/src/main/java/com/punttiurpo/domain/TrainingCalculations.java`, `domain/SetEstimates.java` and `mapper/WorkoutMapper.java`.
+
+A pure calculation returns the same output for the same inputs without changing outside state. TrainingCalculations receives scalar kg, reps, RPE and completion/type flags. It does not load an entity, run SQL, call Spring, read the clock or contact a web service. A private constructor prevents treating this utility as a stateful object; static methods provide the operations directly. This resembles a small stateless TypeScript module or explicit PHP calculation helper.
+
+WorkoutMapper calls the function whenever it creates a WorkoutSetResponse. The same mapper already serves writes, single reads and nested reads, so one calculation path covers all of them. An update cannot leave a stale stored estimate because no estimate is stored. No new controller, entity or migration was needed.
+
+**Why it matters:** separating arithmetic from persistence makes both the meaning and test surface smaller. It also avoids duplicating a formula across endpoints.
+
+**Exercise:** trace one POST set and one GET nested workout to `WorkoutMapper.set`, then identify where the calculator is called.
+
+**Verify:** both paths use the same function. Search the entity and migrations: no estimated-RIR/e1RM column was added. The API result changes when raw set values change, not through a background backfill.
+
+## 32. Exact decimal arithmetic and the rounding boundary
+
+Source: TrainingCalculations and `src/test/java/com/punttiurpo/domain/TrainingCalculationsTest.java` under `backend/`.
+
+The approved Epley formula is `weight × (1 + reps / 30)`. Algebraically we implement `weight × (30 + reps) / 30` to avoid rounding the division before multiplying.
+
+```java
+estimate = weightKg.multiply(THIRTY.add(BigDecimal.valueOf(repetitions)))
+        .divide(THIRTY, 2, RoundingMode.HALF_UP);
+```
+
+BigDecimal has no overloaded arithmetic operators; its methods return new values. Repeating decimal division needs an explicit scale/rounding rule. We choose two final kg decimals and HALF_UP, rounding a halfway value upward for positive inputs. There is no intermediate `double`, and no approximate decimal constant like 0.033 replaces 1/30.
+
+For example, 100 kg × 10 gives 133.333… → 133.33. A test of 0.15 × (33/30) yields 0.165 → 0.17. Two display decimals do not claim the physiological prediction is accurate to 0.01 kg. A single repetition uses the recorded load as an explicit product convention, accompanied by a warning that it is not a verified maximum.
+
+**Why it matters:** rounding too early can change results. A chosen precision/rounding rule is part of the contract and should be testable independently of JSON/database formatting.
+
+**Exercise:** run `./mvnw -Dtest=TrainingCalculationsTest test` and find the test covering 100.01 kg × 2 reps.
+
+**Verify:** the result is 106.68 kg and the stored BigDecimal output scale is two. The tests also cover the one-rep special case and maximum supported input load; no Docker is required for these calculation unit tests.
+
+## 33. Optional, nullable output and explicit unavailable reasons
+
+Sources: TrainingCalculations and SetEstimates.
+
+`rpeToEstimatedRir` returns `Optional<BigDecimal>`. An absent RPE yields Optional.empty; valid input yields `10 − RPE`, with one decimal place. An invalid RPE at this pure method's boundary throws IllegalArgumentException. The HTTP layer already validates the supported range/half-steps; the function also protects its direct callers.
+
+The result record uses nullable numeric components to represent unavailable values in JSON. This is an explicit boundary choice, not a claim that null is preferable everywhere. `estimatedRir` can be null independently of e1RM. The E1rmStatus enum explains why e1RM is unavailable; zero is never used as an unknown-strength placeholder.
+
+Gates are ordered: draft → not working set → missing/nonpositive load → unsupported reps. A completed warmup with RPE may have estimated RIR but no e1RM. A completed set of 12 reps remains a valid log but returns null e1RM with UNSUPPORTED_REPETITIONS. AVAILABLE means the inputs passed product policy, not that an exercise/person has been scientifically validated for prediction.
+
+**Why it matters:** zero RIR means approximately no repetitions in reserve, whereas null means unrecorded/unavailable. Consumers must not confuse those states or plot null e1RM as zero strength.
+
+**Exercise:** create completed sets at RPE 10, with no RPE, and with 11 reps. Inspect each estimates object.
+
+**Verify:** RPE 10 maps to estimatedRir 0.0; missing RPE maps to null; an 11-rep completed set can retain RIR but has null e1RM with an explicit status. A draft returns both numeric estimates null.
+
+## 34. Immutable result records and visible uncertainty
+
+Source: SetEstimates and its nested E1rmStatus/Warning enums.
+
+The record is immutable at the component-reference level. A normal list could still be mutated through that reference, so the compact constructor copies warnings using `List.copyOf`. The result cannot accidentally gain another warning because a caller modified the original ArrayList after calculation.
+
+The calculator adds effort warnings instead of changing the Epley arithmetic using subjective RIR. At the same kg/reps, RPE 8.5 and RPE 10 produce the same repetition-based e1RM; estimated RIR and warnings differ. Missing effort is not inferred to mean maximal effort. A single always adds SINGLE_REPETITION_NOT_VERIFIED_MAXIMUM.
+
+These enum codes are suitable for stable API behavior; the frontend milestone must render understandable Finnish text and the label “Toistomäärään perustuva e1RM-arvio (ei RPE-korjattu)”. The current Swagger schema explains the meaning. General exercise/equipment limitations still apply even when the warning list is empty.
+
+**Why it matters:** correct arithmetic can still communicate the wrong claim. A subjective rating, prediction and measured personal record are different kinds of information.
+
+**Exercise:** record 100 kg × 6 at RPE 8.5, then replace only the RPE with 10 while resending the full set body.
+
+**Verify:** both repetition-based values are 120.00 kg. RIR changes 1.5 → 0.0 and the submaximal warning disappears; this does not create a measured record. Review CALCULATIONS.md for the separately researched, unimplemented RPE-aware candidate.
+
+## 35. Parameterized tests and physiological limits
+
+Sources: TrainingCalculationsTest and the two new calculation cases in `WorkoutApiIntegrationTest.java`.
+
+JUnit parameterized tests run one test method with multiple explicit inputs. `@CsvSource` covers every supported RPE half-step and known Epley/rounding values; `@ValueSource` tests invalid ratings; `@MethodSource` supplies varied nullable/boolean inputs and expected eligibility statuses. This expresses boundaries compactly without a generic testing framework of our own.
+
+HTTP/PostgreSQL tests verify that actual JSON responses agree across POST, PUT, GET set and nested reads, that high reps/drafts become unavailable correctly and that missing/submaximal effort remains visible. Pure arithmetic tests do not prove a physiological model is valid. The research note explicitly distinguishes published RIR-scale evidence from the unvalidated inference of adding RIR to Epley reps.
+
+**Why it matters:** tests establish implemented behavior, not scientific truth. Combining unit cases with a few real response tests proves both policy and integration without requiring Docker for every arithmetic example.
+
+**Exercise:** run the focused calculation unit test, then full `./mvnw verify` with Docker running. Inspect a parameterized case where the final division repeats.
+
+**Verify:** 36 calculation cases pass independently; full verification now runs 67 tests across eight classes (44 unit/parameterized, 23 PostgreSQL/integration). The database schema remains four migrations, and original observations remain unchanged.
+
+## Milestone 4 review questions and exercise
+
+1. Why multiply before division and round only the final kg result?
+2. How do null RIR, zero RIR and an unavailable e1RM express different information?
+3. Why does changing RPE change warnings/RIR but not the current repetition-based Epley value?
+
+Suggested exercise: in a disposable workout compare a completed 100 kg × 6 set at RPE 8.5 and 10, a completed 11-rep set, and a draft. Explain the estimates/status/warnings from the pure function, then remove only your disposable workout. No RPE-adjusted formula or frontend is included; stop before Milestone 5 until approved.

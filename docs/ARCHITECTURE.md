@@ -1,6 +1,6 @@
 # Architecture
 
-## Implemented through Milestone 3
+## Implemented through Milestone 4
 
 A JVM process runs Spring Boot, embedded Tomcat, Web MVC, Actuator, Spring Data JPA/Hibernate, JDBC/HikariCP and Flyway. PostgreSQL runs in this project's separate Compose stack. Configuration remains environment-based and local-only.
 
@@ -42,7 +42,7 @@ Actuator performs aggregate dependency checks and returns only UP/DOWN status. D
 
 Unit tests cover request normalization/validation boundaries and service rules using Mockito repository doubles. The subclass mock maker avoids runtime Java-agent attachment; it cannot mock final classes, which these tests do not require. Integration tests use full HTTP servers and real disposable PostgreSQL containers for migrations, constraints, rollback, search, validation, seed protection, health outage/recovery and OpenAPI/UI compatibility.
 
-Authentication, ownership, derived strength metrics and frontend UI remain future milestones. Workout references and deletion boundaries are implemented as documented below. Metadata remains free text; search uses database substring matching rather than a search engine. See the decision log for trade-offs.
+Authentication, ownership, progression aggregation and frontend UI remain future milestones. Per-set RIR/repetition-based e1RM estimates are implemented in Milestone 4. Workout references and deletion boundaries are implemented as documented below. Metadata remains free text; search uses database substring matching rather than a search engine. See the decision log for trade-offs.
 
 
 ## Workout domain and nested reads
@@ -63,4 +63,13 @@ Workout detail loads the parent, its logged exercises with catalogue references 
 
 The JPA relationships are required, lazy and unidirectional: WorkoutExercise → Workout/Exercise and WorkoutSet → WorkoutExercise. There are no bidirectional collections to serialize or keep synchronized. PostgreSQL foreign keys own cascades: deleting a workout removes its logged exercises/sets, deleting a logged exercise removes its sets, and referenced catalogue deletion is restricted. Database integration tests prove these effects across separate requests and check unrelated data remains.
 
-Cross-field rules live in WorkoutService (time range, completed-set requirements, RPE half-step); scalar bounds live on DTOs, and SQL repeats critical integrity checks. BigDecimal and explicit numeric scale preserve decimal values. RPE is recorded but no RIR/e1RM calculation occurs until Milestone 4. Date-only training dates use LocalDate, while optional timestamps use Instant. Set types use a string-persisted enum. See DATABASE.md for precision, foreign keys and ordering behavior.
+Cross-field rules live in WorkoutService (time range, completed-set requirements, RPE half-step); scalar bounds live on DTOs, and SQL repeats critical integrity checks. BigDecimal and explicit numeric scale preserve decimal values. RPE is recorded and Milestone 4 derives approximate RIR/repetition-based e1RM through pure domain functions. Date-only training dates use LocalDate, while optional timestamps use Instant. Set types use a string-persisted enum. See DATABASE.md for precision, foreign keys and ordering behavior.
+
+
+## Pure training calculations
+
+`domain/TrainingCalculations` accepts scalar kg, repetitions, RPE and completed/working-set flags. It has no entity, repository or Spring dependency. `domain/SetEstimates` is an immutable result with nullable unavailable values and enum status/warnings. The result copies its warning list to prevent accidental mutation.
+
+WorkoutMapper invokes the calculator while mapping each set. This single path serves creation, replacement, single reads and nested reads, avoiding divergent formulas or stale stored results. No metric columns, migration, backfill, external request or calculation-library dependency is introduced. Unit tests prove arithmetic and boundaries independently of Spring; integration tests prove serialization and current-data recalculation through real HTTP/PostgreSQL paths.
+
+Estimated RIR uses 10 − RPE; e1RM uses Epley with the documented single-rep convention, final-only decimal rounding and explicit eligibility. These do not adjust repetitions using RIR. Future charts must preserve method labels and exclude unavailable values rather than treating null as zero. See CALCULATIONS.md for applicability and the separate unimplemented research candidate.
