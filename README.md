@@ -4,7 +4,7 @@ A Finnish strength-training logbook being built for daily use, Java learning and
 
 ## Current status
 
-**Milestone 1: Java foundation implemented and verified; awaiting review.** The backend starts, connects to PostgreSQL, initializes Flyway and exposes a database-aware health endpoint. Three integration tests run against disposable real PostgreSQL containers. No exercise catalogue, workout logging, frontend or authentication exists yet.
+**Milestone 3: Workout domain implemented; validation evidence is in the learning log.** The local REST API supports the ten requested built-in exercises, custom exercises, workout creation/history summaries, ordered logged exercises and draft/completed sets. Workouts, logged exercises and sets can be read, edited and deleted with explicit cascade boundaries. No frontend, authentication, progression statistics, RIR or estimated 1RM calculations exist yet.
 
 Build and verify a complete milestone, then review the working code and tutorial. Stop for approval between milestones; tutorial exercises do not block implementation within an approved milestone.
 
@@ -12,12 +12,28 @@ Build and verify a complete milestone, then review the working code and tutorial
 
 - Eclipse Temurin JDK 25; locally installed ARM64 runtime: 25.0.4.1.
 - Spring Boot 4.1.1, Spring Web MVC, embedded Tomcat and Actuator.
-- Spring JDBC with HikariCP; PostgreSQL 18.6; Flyway.
+- Spring Data JPA/Hibernate, Bean Validation, JDBC/HikariCP, PostgreSQL 18.6 and Flyway.
+- Springdoc OpenAPI / Swagger UI 3.1.1.
 - Maven 3.10.0 through Maven Wrapper 3.3.4.
 - JUnit and Spring Boot Test with Testcontainers PostgreSQL integration tests.
-- Planned: JPA/Hibernate, Bean Validation, React, TypeScript and Vite.
+- Planned frontend: React, TypeScript and Vite.
 
-`backend/` is the Maven project, with base package `com.punttiurpo`. Controller, service and repository layers will appear when real features need them. `compose.yaml` defines only this project's local database. The frontend belongs to Milestone 5.
+`backend/` is the Maven project, with base package `com.punttiurpo`. Controller, service, repository, entity, DTO, mapper and exception packages implement the catalogue. `compose.yaml` defines only this project's local database. The frontend belongs to Milestone 5.
+
+## Built-in catalogue
+
+- Barbell Back Squat
+- Romanian Deadlift
+- Bulgarian Split Squat
+- Deadlift
+- Bench Press
+- Dumbbell Curl
+- Skull Crusher
+- Dumbbell Lateral Raise
+- Cable Flys
+- Cable Tricep. Extension
+
+Names follow Roope's requested English labels; product UI and validation instructions remain Finnish. Custom exercises remain available and are not removed by the catalogue migration.
 
 ## Local setup (macOS)
 
@@ -66,7 +82,7 @@ From `backend/`, with JDK 25 selected and Docker running:
 ./mvnw verify
 ```
 
-This compiles, runs three real PostgreSQL integration tests and packages an executable JAR. Tests supply their own credentials and random ports; neither `.env` nor the Compose database is needed for tests. They fail if Docker is unavailable rather than silently skipping database coverage. The outage test pauses only its own disposable database container and restores it in a `finally` block.
+This compiles, runs unit tests and real PostgreSQL integration tests, and packages an executable JAR. Tests supply their own credentials and random ports; neither `.env` nor the Compose database is needed for tests. They fail if Docker is unavailable rather than silently skipping database coverage. The outage test pauses only its own disposable database container and restores it in a `finally` block. Workout deletion tests operate only on their own test databases.
 
 The wrapper downloads Maven and verifies its pinned SHA-256. Initial dependency and Docker-image downloads require network access. Windows uses `mvnw.cmd` and an appropriate JDK 25/environment setup.
 
@@ -80,9 +96,11 @@ See [the learning log](docs/LEARNING-LOG.md) for actual results and [the Java tu
 
 ## Database and limitations
 
-Flyway owns the schema; the only current table is `flyway_schema_history`. There are no SQL migrations or application tables yet. The first domain migration belongs to Milestone 2. No JPA entities exist, and Hibernate must eventually validate rather than generate schema.
+Flyway owns the schema: V1 creates `exercise`, V2 records the original seed history, V3 switches the built-in catalogue to the ten requested English exercise names, and V4 creates workouts, logged exercises and sets. Equivalent catalogue IDs and custom exercises are preserved. Hibernate validates the schema and never generates it. Existing volumes upgrade through versioned migrations without a reset. Custom exercises are editable; built-ins are read-only. Catalogue exercise deletion remains unexposed and database-restricted while referenced. Deleting a workout cascades to its logged exercises/sets; deleting a logged exercise cascades only to its sets. Catalogue records and other workouts are preserved.
 
 The Compose database has its own `puntti-urpo_postgres_data` volume. Stop/start and `docker compose down` preserve it; **`docker compose down -v` deletes it**. PostgreSQL credentials/database initialization settings apply when the volume is first initialized. Editing those settings later does not update existing roles or data. See [database documentation](docs/DATABASE.md).
+
+Use `/api/exercises?q=bench` for search, `/api/workouts` for workout summaries, `/v3/api-docs` for OpenAPI JSON and `/swagger-ui/index.html` for interactive API documentation. See [API documentation](docs/API.md) for POST/PUT/DELETE payloads, a copyable workout logging sequence, pagination, errors and limits. Write operations are local-only and have no per-user ownership yet.
 
 The health endpoint reports dependency availability, not workout correctness, authentication or backup readiness. A database failure during startup prevents the application from starting because Flyway requires a connection; a later failure returns HTTP 503 while the process remains alive.
 

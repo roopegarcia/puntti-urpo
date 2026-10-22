@@ -4,7 +4,7 @@
 
 The [README](../README.md) provides the copyable setup, environment export, Maven and executable-JAR commands. Requirements are JDK 25 and running Docker Desktop; global Maven is unnecessary.
 
-Local defaults: Java binds to `127.0.0.1:8080`; PostgreSQL binds to `127.0.0.1:54328`. The HTTP port and database settings are environment-configurable. Compose is a database-only local stack with a dedicated volume, health check and `unless-stopped` restart policy. No production Dockerfile exists yet.
+Local defaults: Java binds to `127.0.0.1:8080`; PostgreSQL binds to `127.0.0.1:54328`. The HTTP port and database settings are environment-configurable. Compose is a database-only local stack with a dedicated volume, health check and `unless-stopped` restart policy. No production Dockerfile exists yet. Workout APIs are available only after restarting the Java process with the updated build; refresh Swagger in a normal browser afterward. VS Code's in-app browser has prevented request editing in local testing.
 
 Database lifecycle commands, from the repository root:
 
@@ -25,7 +25,7 @@ For an optional health outage exercise, start Java and check `/actuator/health`,
 - Port occupied: change the appropriate `.env` port, export settings again and rerun Compose/Java; do not stop unrelated services.
 - Password missing: set it in ignored `.env` and export the file before launching Java. Compose loading it does not make it available to a separate shell process.
 - Authentication failure after editing `.env`: existing-volume credentials do not change automatically. Restore the correct settings or change the database role deliberately; do not delete the volume to bypass diagnosis.
-- Flyway reports no migrations: expected in Milestone 1, which has no domain schema yet.
+- Flyway migration/validation failure: inspect the error and applied versions; Milestone 3 has V1–V4. Do not reset the volume or edit an applied migration to bypass diagnosis. Hibernate validates the migrated schema.
 - Startup fails with a database error: check `docker compose ps`, credentials and ports. Flyway intentionally prevents startup against an inaccessible database.
 - HTTP 404 at `/`: expected. Check `/actuator/health` for operational health.
 - Health 503 after startup: inspect local logs and database state. Connection, validation and socket timeouts bound JDBC waits.
@@ -34,7 +34,7 @@ For an optional health outage exercise, start Java and check `/actuator/health`,
 
 ## Logs and secrets
 
-Java logs to the terminal and PostgreSQL logs are available through Compose. Dependency outages produce expected server-side diagnostic warnings, which can include stack traces. HTTP health and error responses do not expose those details. Never publish raw logs without reviewing them for sensitive information.
+Java writes ECS JSON logs to the terminal and PostgreSQL logs are available through Compose. Local API documentation is available at `/swagger-ui/index.html`, with OpenAPI JSON at `/v3/api-docs`. These expose write operations without authentication and must remain local-only until the security milestone. Dependency outages produce expected server-side diagnostic warnings, which can include stack traces. HTTP health and error responses do not expose those details. Never publish raw logs without reviewing them for sensitive information.
 
 The implementation created an ignored local `.env` with a random password and file permissions 0600. `.env.example` contains no password. Environment configuration is adequate for this local milestone; production secret handling must be reviewed before deployment.
 

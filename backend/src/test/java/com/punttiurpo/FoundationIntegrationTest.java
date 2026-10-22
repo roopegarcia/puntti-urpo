@@ -56,13 +56,13 @@ class FoundationIntegrationTest {
     }
 
     @Test
-    void initializesFlywayWithoutCreatingDomainTables() {
-        assertThat(flyway.info().applied()).isEmpty();
+    void appliesCatalogueMigrationsAndValidatesSchema() {
+        assertThat(flyway.info().applied()).hasSize(4);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(jdbc.queryForList("""
                 SELECT tablename FROM pg_tables
                 WHERE schemaname = 'public'
-                """, String.class)).containsExactly("flyway_schema_history");
+                """, String.class)).containsExactlyInAnyOrder("flyway_schema_history", "exercise", "workout", "workout_exercise", "workout_set");
     }
 
     @Test

@@ -1,20 +1,78 @@
 # Database
 
-## Implemented state
+## Local database and lifecycle
 
-PostgreSQL 18.6 runs through `compose.yaml` in the dedicated `puntti-urpo` Compose project. It has its own network and `puntti-urpo_postgres_data` named volume. Host access binds only to `127.0.0.1`, default port 54328. The backend uses JDBC and HikariCP, not JPA yet.
+PostgreSQL 18.6 uses this project's `compose.yaml`, dedicated network and `puntti-urpo_postgres_data` volume. Its host port defaults to `127.0.0.1:54328`. The official PostgreSQL 18 image's parent data location `/var/lib/postgresql` is mounted to the volume. Credentials are initialized only for a new volume; editing `.env` later does not update existing database roles.
 
-The PostgreSQL 18 official image stores version-specific data underneath `/var/lib/postgresql`; mount the volume at that parent path, as this Compose file does. The image initializes `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` only for a new data directory. Changing `.env` later does not automatically change stored users, passwords or database names.
+The backend reads `DB_HOST`, `DB_PORT`, `POSTGRES_DB`, `POSTGRES_USER` and required `POSTGRES_PASSWORD`. Compose reads `.env`; Java requires exporting it separately (README). Stop/start and `docker compose down` preserve data; `docker compose down -v` deletes it. Volume persistence is not a backup. Production backup/restore belongs to Milestone 7.
 
-## Configuration and migrations
+## Implemented schema: catalogue and workout domain
 
-The backend reads `DB_HOST`, `DB_PORT`, `POSTGRES_DB`, `POSTGRES_USER` and required `POSTGRES_PASSWORD` from its environment. Compose loads `.env`; export it separately before starting Java, as documented in the README. No real credentials belong in tracked files.
+```mermaid
+erDiagram
+    WORKOUT ||--o{ WORKOUT_EXERCISE : contains
+    EXERCISE ||--o{ WORKOUT_EXERCISE : referenced_by
+    WORKOUT_EXERCISE ||--o{ WORKOUT_SET : contains
+    EXERCISE {
+        bigint id PK
+        varchar name "required, max 100, case-insensitive unique"
+        varchar category
+        varchar primary_muscle_group
+        varchar equipment
+        varchar notes
+        boolean custom
+    }
+    WORKOUT {
+        bigint id PK
+        date date "required training date"
+        varchar title
+        varchar notes
+        timestamptz started_at
+        timestamptz ended_at
+    }
+    WORKOUT_EXERCISE {
+        bigint id PK
+        bigint workout_id FK
+        bigint exercise_id FK
+        integer display_order
+        varchar notes
+    }
+    WORKOUT_SET {
+        bigint id PK
+        bigint workout_exercise_id FK
+        integer set_order
+        numeric weight_kg "6,2 exact decimal"
+        integer repetitions
+        numeric rpe "3,1 exact decimal"
+        varchar set_type
+        boolean completed
+    }
+```
 
-Flyway scans `backend/src/main/resources/db/migration/`. The README there is explanatory text, not a SQL migration. There are deliberately no application migrations in Milestone 1. Startup creates `flyway_schema_history`; integration tests verify zero applied/pending migrations and no domain tables. Flyway may warn that no migrations were found; that is expected for this milestone.
+`id` is the primary key, generated using PostgreSQL `GENERATED ALWAYS AS IDENTITY`. The JPA entity uses a nullable `Long` before insertion and `GenerationType.IDENTITY` to obtain the database-generated ID. `@Column` mappings make sizes and snake_case naming explicit.
 
-Migration validation is enabled and Flyway clean is disabled. Milestone 2 introduces the first domain SQL migration. Applied migrations are history: add a new migration to change an existing shared schema rather than editing an already applied migration. Hibernate must eventually validate this schema instead of changing it.
+The unique expression index `exercise_name_unique` on `lower(name)` prevents case-only duplicates across custom and built-in records, including racing inserts or updates. CHECK constraints reject empty/space-only names and surrounding ordinary spaces. API normalization/Bean Validation additionally handle Java whitespace and input length before persistence. SQL varchar lengths and checks are authoritative database constraints; the API can be stricter. Search uses a parameterized JPQL literal substring (`locate`), so user input cannot become SQL or LIKE wildcards. The small catalogue does not need a trigram/full-text index yet; the uniqueness index is not a substring-search optimization.
 
-## Inspecting the local database
+`custom=false` marks the ten requested built-in exercises; API creates always set true and updates cannot change this field. The service rejects edits to built-ins. This is application-level catalogue protection, not a database permission system or per-user authorization. Metadata is nullable free text. Workout foreign keys, explicit cascades and logging APIs now exist; decimal-based RIR/e1RM calculations remain Milestone 4 work.
+
+## Migrations and JPA validation
+
+- V1 creates the exercise table and name constraints/index.
+- V2 records the original eight Finnish seed exercises.
+- V3 changes built-ins to exactly Roope's ten requested English names. Bench Press, Barbell Back Squat, Deadlift and Dumbbell Curl keep their equivalent original IDs. Four unused built-ins are removed before workout relationships exist, and six new entries are inserted. Custom exercises are untouched. A case-insensitive collision with an existing custom name fails the migration transaction safely; resolve it deliberately rather than deleting user data.
+- V4 creates workout, workout_exercise and workout_set with keys, ordering and performance constraints.
+
+Both files are under `backend/src/main/resources/db/migration/`. Flyway stores applied versions/checksums in `flyway_schema_history`, applies migrations once and validates later starts. Never edit an applied shared migration; add a new version. Clean remains disabled. Hibernate `ddl-auto=validate` checks the mapped table at startup and must never update schema automatically.
+
+Pre-existing databases upgrade by running missing V1–V4 migrations; no volume reset or data deletion is needed. The seed migration is versioned, not a startup routine that overwrites edited data. Future seed corrections require a deliberate migration.
+
+## Transactions and tests
+
+Service reads are `@Transactional(readOnly=true)`. Create/update use write transactions. Updates change a managed entity; Hibernate tracks those changes. Explicit flush makes integrity conflicts surface before returning success. A duplicate update rolls back, preserving the previous values. `spring.jpa.open-in-view=false` keeps database access inside service boundaries.
+
+Unit tests check service policy with repository mocks. Full HTTP integration tests use a separate real PostgreSQL container, clean only their own custom rows between cases, and verify schema/seed application, constraint enforcement and rollback. They never use the Compose volume. The foundation integration suite separately tests database health and migration history.
+
+## Inspection
 
 From the repository root with the database running:
 
@@ -22,16 +80,24 @@ From the repository root with the database running:
 docker compose exec db sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-Inside psql, use `\dt`, `SELECT version();` and `\q`. Do not paste credentials into commands or logs.
+Inside psql: `\dt`, `\d exercise`, `SELECT id, name, custom FROM exercise ORDER BY id;`, and `\q`. No password needs printing.
 
-## Persistence and isolation
+## Workout relationships, ordering and deletion
 
-`docker compose stop db`, `docker compose restart db` and `docker compose down` preserve the named volume. `docker compose down -v` deletes project data and is not a routine restart command. The milestone verification created a disposable marker, checked it after stop/start, then removed its entire verification schema.
+Each logged exercise references exactly one workout and one catalogue exercise through required lazy `@ManyToOne` mappings. Each set references exactly one logged exercise. Catalogue entries can occur repeatedly in a workout at different display positions. References never move to another parent through PUT.
 
-Tests use disposable Testcontainers databases with generated connection settings and random ports. They do not connect to the Compose database or reuse its named volume. Failure to access Docker fails the tests; it does not silently replace PostgreSQL with an in-memory database.
+Foreign keys define deletion explicitly: workout → logged exercise and logged exercise → set use `ON DELETE CASCADE`; catalogue exercise references use `ON DELETE RESTRICT`. Deleting a workout removes only its descendants, while deleting a logged exercise removes only its sets. Other workouts, siblings and catalogue records survive. There is still no catalogue DELETE API.
 
-## Domain modeling: deferred
+JPA mappings are unidirectional and have no cascade-remove annotations or parent collections. PostgreSQL performs the child deletion; Hibernate is not asked to load every child and remove it individually. No ORM orphan-removal rule is implied. APIs flush before returning; a failed constraint rolls back the transaction.
 
-There are no domain entities, foreign keys, application indexes, JPA mappings or business transaction boundaries yet. No implemented ER diagram can be shown at this stage. Add the actual ER diagram as tables arrive, rather than presenting a proposal as a live schema.
+`display_order` and `set_order` range from 0 to 1,000,000, unique per immediate parent. Their unique indexes also support the parent foreign-key lookups. New items append at max + 1; sets may specify a position. Gaps after deletion are valid. A move onto an occupied position or racing append returns 409. Atomic batch reorder and automatic retry are not implemented. A separate index supports catalogue references; workout `(date DESC, id DESC)` supports history summaries.
 
-Exercise, Workout, WorkoutExercise and WorkoutSet remain planned concepts. Before their implementation, define IDs, relationships, foreign keys, indexes, decimal precision, ordering, constraints and deletion behavior. Document primary/foreign keys, relational integrity and transaction behavior with the actual SQL and Java code at that milestone.
+## Performance and temporal storage
+
+`weight_kg` is nullable `numeric(6,2)`, mapped to BigDecimal: 0–9999.99 and at most two decimal places through the API. `rpe` is nullable `numeric(3,1)`, restricted to 6–10 in exact half-point increments. Repetitions are nullable integers in 0–1000. A CHECK requires non-null weight and positive repetitions when completed is true. Draft sets may remain incomplete. Enum set type is stored as WARMUP/WORKING text, never a fragile ordinal.
+
+Bean Validation rejects excess decimal places before database storage. PostgreSQL numeric coercion can round values supplied by direct administrative SQL, so direct writers must honor the same precision contract. There is no binary floating-point conversion in the application. RPE is subjective; no RIR/e1RM calculation or performance classification is implemented in Milestone 3.
+
+Training `date` maps to LocalDate independently of server timezone. Optional started/ended timestamps map to Instant and `timestamp with time zone`; the end requires a start and cannot be earlier. PostgreSQL preserves an instant, not the original offset/timezone string. Normal PostgreSQL timestamp precision is microseconds; do not rely on nanosecond round trips.
+
+Nested workout reads load catalogue details with an entity graph and all workout sets in one query, then group sets by logged-exercise ID. The service assembles DTOs inside its transaction with OSIV disabled. Current catalogue names are shown through references; there is no historical name snapshot. Concurrent editing is last successful write wins, with database constraints enforcing integrity; optimistic versioning is not implemented.

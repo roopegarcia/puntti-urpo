@@ -1,9 +1,12 @@
 # Database migrations
 
-Flyway is configured to read versioned SQL migrations from this directory.
-There are deliberately no SQL migrations in Milestone 1. Flyway creates its
-own schema-history table, but no application tables. The first domain migration
-belongs to the exercise catalogue in Milestone 2.
+- V1 creates the exercise table and name constraints.
+- V2 records the original eight Finnish catalogue entries.
+- V3 changes built-ins to the ten user-requested English exercise names, preserving
+  equivalent IDs and custom rows. A name collision fails safely; do not delete a
+  custom record to force the migration through without discussing resolution.
+- V4 creates workouts, logged exercises and sets, with exact numeric types,
+  ordered-parent uniqueness, performance checks and explicit foreign-key deletes.
 
-Use names such as `V1__create_exercise.sql` when that milestone is approved.
-Never edit a migration that has already been applied to a shared database.
+Never edit applied migrations. Add a new migration for changes; Hibernate validates
+rather than generates schema. Fresh and existing databases follow the same history.
