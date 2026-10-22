@@ -833,3 +833,14 @@ Exercise: in separate normal/private browser sessions, log in as owner and demo.
 3. Why is JVM heap size smaller than the container's total memory limit?
 
 Exercise: read `deploy/HealthCheck.java` and trace what happens if Java is alive but its database is unavailable. Use the existing disposable Testcontainers outage test locally rather than stopping the production database for practice. Understanding has not yet been demonstrated; deployment verification is not a substitute for explaining the code.
+
+
+## 44. Publishing UI copy does not rebuild Java
+
+`deploy/publish` is a Bash operations helper, not a Spring service. React copy lives in source files but nginx serves compiled assets inside an image. The helper runs frontend checks, builds that image and recreates only the web container. `deploy/compose.yaml` uses optional WEB_RELEASE for the frontend image, falling back to RELEASE; Java keeps its existing image and process-local sessions. This resembles compiling TypeScript and publishing the generated bundle while keeping a PHP/API service running. Git push stores source; it does not execute this helper.
+
+The script compares committed backend/infrastructure files against the running images' commit tags. Backend changes need the full release procedure, including migration review and backups. The helper's public checks prove basic delivery and anonymous API denial; they do not prove every logged-in flow or that the wording is correct.
+
+**Exercise:** after committing a small UI copy edit, use `./deploy/publish --dry-run` and explain why it can identify a release without uploading anything. Before actual publication, identify which Compose service will be recreated and why Java does not need to restart. See deploy/README.md for the actual publication command.
+
+**Verify:** `python3 deploy/test-publish.py` checks rejection of dirty/backend/infrastructure changes, successful web-only activation, build failure, verification-triggered rollback and a concurrent production change using fake external commands. These are deployment control-flow tests; Java/PostgreSQL behavior remains covered by the existing backend tests.

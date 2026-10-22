@@ -158,3 +158,7 @@ Deployment was explicitly authorized on 2026-10-22. The dedicated NUC stack, pro
 - [Changelog](CHANGELOG.md): implemented changes.
 
 The repository is private. Portfolio source review must exclude credentials and personal data. Professional presentation and interview-review instructions belong to Milestone 8.
+
+## Publishing frontend updates
+
+Commit/push your copy or UI changes, then run `./deploy/publish` from the project root. Use `./deploy/publish --dry-run` for a read-only preflight. It tests/builds the frontend and updates only its production container, preserving Java sessions and workouts. Backend/infrastructure changes require the [full release workflow](deploy/README.md). See that runbook for verification and rollback.

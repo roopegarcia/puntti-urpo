@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `./deploy/publish` for committed frontend updates, with read-only preflight, production source guards, separate WEB_RELEASE tagging, frontend-only recreation and verification-triggered rollback.
+
 - Published the authorized isolated AMD64 production stack on the NUC: pinned multi-stage images, nginx/API routing, Secure sessions, private PostgreSQL, health/resource limits and rotated logs.
 - Added private custom-format database backups, verified scratch restore and daily scheduling; public HTTPS, both accounts, private records and logout verified; operation details are tracked in DEPLOYMENT.md. Production starts with an empty owner account and fresh credentials.
 

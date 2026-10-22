@@ -1,5 +1,17 @@
 # Learning log
 
+## 2026-10-22 — One-command frontend publication helper
+
+**Request:** simplify publishing copy/UI changes with `./deploy/publish`. Added an executable Bash helper and a separate optional WEB_RELEASE image tag, preserving RELEASE for Java. Clean committed source is required; backend and infrastructure deltas are rejected (apart from the explicit initial WEB_RELEASE fallback). Normal runs perform npm checks/build, stage committed source on the NUC, build native web, recreate only web and verify loopback/public delivery and anonymous API denial. Previous images are retained and failed activation/verification triggers a web rollback attempt. No database writes/migrations, Java restart or Cloudflare changes are part of this helper.
+
+**Actual verification:** Bash syntax and Compose validation passed, including separate backend/web image selection. Nine safety cases passed in temporary repositories with fake SSH/Docker/curl: committed dry run; backend, proxy and Compose rejection; dirty/untracked rejection; successful web-only activation; rollback after public failure; build failure before activation; and concurrent production change refusal. An additional committed temporary-checkout dry run read actual production image tags and passed without production writes. No live publication or rollback was executed. Existing frontend copy edits made concurrently were preserved.
+
+**Files:** new deploy/publish and deploy/test-publish.py; updated deploy/compose.yaml, deploy/README.md, root README/changelog, decisions, Java tutorial section 44, learning log and AGENTS. This helper change is uncommitted and has not been pushed/deployed.
+
+**Learning:** why does Git push not change compiled React assets? Why can WEB_RELEASE change while RELEASE stays the same? Why does a failed frontend build leave the current app serving? Exercise: review the script's dry-run boundary and run it after committing a small copy edit. Understanding has not yet been demonstrated.
+
+---
+
 ## 2026-10-22 — Authorized first production publication
 
 **Authorization and scope:** Roope requested commit, push and deployment, chose an empty production owner, and explicitly confirmed the public Cloudflare route. This completes the approved publication; Milestone 6 history/progression remains planned. No local records were imported and unrelated NUC apps/routes/storage were preserved.

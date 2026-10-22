@@ -62,7 +62,7 @@ services:
     restart: unless-stopped
     logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
   web:
-    image: puntti-urpo-web:${RELEASE:?required}
+    image: puntti-urpo-web:${WEB_RELEASE:-${RELEASE:?required}}
     build: {context: .., dockerfile: deploy/frontend.Dockerfile}
     ports: ['127.0.0.1:${WEB_PORT:-8106}:8080']
     networks: [private, edge]

@@ -281,3 +281,12 @@ Compatibility references: [Spring SQL/JPA documentation](https://docs.spring.io/
 **Reasoning:** proves archive readability and restoration without replacing production records or allocating another persistent stack. Initial verification restored all six migrations and the demo session. A restart-persistence test used and removed only a named disposable owner workout.
 
 **Trade-offs:** local backups do not survive host/disk loss. An encrypted off-host destination/schedule is not configured automatically. The restore drill proves database restoration, not full disaster recovery or arbitrary future migration rollback. Destructive recovery requires explicit target approval.
+
+
+## 2026-10-22 — Explicit frontend publication command
+
+**Context:** Roope wants a short release path for copy edits. React copy is compiled into static assets; Git push alone cannot change nginx's existing image.
+
+**Decision:** add a readable Bash publish helper using the existing SSH/Git archive and native NUC build. Keep a separate optional WEB_RELEASE while RELEASE identifies Java. Reject backend/infrastructure changes, run frontend checks, recreate only web and retain/restore the previous image after a failed verification. Full releases retain their existing manual backup/migration workflow and clear the frontend override before building.
+
+**Trade-offs:** brief web downtime, local Node/npm and SSH/Git history are required, and public checks verify reachability/security boundaries rather than every authenticated flow or copy detail. There is no automatic GitHub deployment and no general deployment platform.

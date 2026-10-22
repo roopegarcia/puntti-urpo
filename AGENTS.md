@@ -876,3 +876,7 @@ On 2026-10-22 Roope explicitly authorized commit, push and deployment of the rev
 
 ### Verified publication — 2026-10-22
 The user explicitly confirmed creating the public route. Cloudflare confirmed puntti-urpo.iltapaska.com → http://127.0.0.1:8106 on existing roopenuc. Public TLS/HTML, real owner/demo authentication, Secure sessions, CSRF, scoped reads/writes and logout passed with curl; Safari rendered the login. Production owner is empty after disposable verification cleanup; demo has only invented data. Running app image release is 62255cd668da; subsequent documentation/script-only commits do not change that tag. Daily local backups and scratch restore are verified, but off-host backups remain unconfigured. See DEPLOYMENT.md and deploy/README.md. Milestone 6 is still awaiting approval.
+
+
+### Frontend publication helper
+`./deploy/publish` supports clean committed frontend-only updates, with --dry-run, backend/infrastructure source guards, local frontend checks, native staged web build, frontend-only recreation and failure-triggered rollback attempt. WEB_RELEASE optionally overrides web's RELEASE image tag; clear it before a full release build. See deploy/README.md. Test control flow without production access using python3 deploy/test-publish.py. Do not infer live publication from these mocked checks. Preserve concurrent user copy edits.

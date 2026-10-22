@@ -18,6 +18,33 @@ The user chose **an empty owner account**; do not import local workouts, custom 
 
 Required private configuration: `RELEASE`, `WEB_PORT=8106`, `POSTGRES_PASSWORD`, `OWNER_PASSWORD_HASH` and `DEMO_PASSWORD_HASH`. Compose uses explicit required values and never prints secrets during validation (`config --quiet`). Its backend forces Secure cookies. Never run plain `docker compose config` in shared output, since it expands secret environment values.
 
+## Publish frontend copy and UI updates
+
+After editing and testing, commit your changes and push them to GitHub. From the project root on the Mac:
+
+```sh
+./deploy/publish --dry-run
+./deploy/publish
+```
+
+Validate the helper itself with `bash -n deploy/publish` and `python3 deploy/test-publish.py`. The safety tests use temporary Git repositories and fake SSH/Docker/curl, including build failure and rollback; they do not connect to production.
+
+The helper requires a clean committed checkout (including new files). GitHub push is your separate source backup; this command publishes the local HEAD commit, not uncommitted edits or whatever happens to be on GitHub. It uses the existing SSH key for `roope@192.168.1.21`; no sudo or Cloudflare changes are needed.
+
+The dry run reads production image tags and compares their commits with your checkout. It does not install dependencies, upload files, build images or change production. Normal publish runs `npm ci`, TypeScript/tests and a local build, uploads a Git archive to private staging, builds the web image natively on the NUC and recreates only web with `--no-deps`. Java sessions, database containers and workout data remain in place. Brief frontend downtime is possible. Builds download pinned base images/npm dependencies as needed.
+
+Backend changes and Dockerfile/nginx/Compose changes are rejected in favor of the full release workflow below. The one initial Compose change allowing a separate `WEB_RELEASE` is explicitly supported. Documentation and this helper can accompany frontend updates. Source comparison uses production image commit tags, so keep their commits available in your local Git history.
+
+`RELEASE` continues to identify the backend/full release. The optional private `.env` value `WEB_RELEASE` identifies the separately published frontend; without it, web defaults to RELEASE. The script serializes publishers, checks that production did not change during preflight, validates web health, public Finnish HTML and anonymous API denial, and checks that the backend image stayed unchanged. If activation/verification fails, it attempts to restore the previous web image and reports failure. Existing images are retained. These checks do not replace checking the changed copy and logged-in UI in your browser; the helper does not log in or create workouts.
+
+For frontend rollback, set WEB_RELEASE in the NUC `.env` to the prior frontend image tag and recreate only web:
+
+```sh
+docker compose --env-file .env -f deploy/compose.yaml up -d --no-deps --no-build --wait web
+```
+
+Do not run the manual full-release workflow concurrently with a publisher. A failed build leaves running containers intact; source files/configuration are copied only after the image builds. No database backup is taken for this frontend-only operation because it does not migrate or mutate the database. Full releases with database changes still require the backup/restore checks below.
+
 ## Upload and start a committed release
 
 Run frontend/backend checks before releasing. Do not build over a running local JAR file; stop/restart that local process deliberately if rebuilding its artifact. The deployment build runs on the NUC and does not touch local target files.
@@ -34,6 +61,8 @@ Provision the production `.env` securely beforehand; never include it in the Git
 ```sh
 cd ~/apps/puntti-urpo
 # Set RELEASE in private .env to the uploaded commit's identifier.
+# For a full release, remove any separate frontend override BEFORE building:
+sed -i '/^WEB_RELEASE=/d' .env
 docker compose --env-file .env -f deploy/compose.yaml config --quiet
 docker compose --env-file .env -f deploy/compose.yaml build --pull
 docker compose --env-file .env -f deploy/compose.yaml up -d --wait --wait-timeout 180

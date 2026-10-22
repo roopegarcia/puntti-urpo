@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Publish a committed frontend update; Java, PostgreSQL and their containers stay running.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if [[ ${1:-} == --help ]]; then
+  printf 'Usage: ./deploy/publish [--dry-run]\nPublishes a clean committed frontend to roope@192.168.1.21.\n--dry-run checks local changes and reads current production image tags only.\n'
+  exit 0
+fi
+[[ $# == 0 || ( $# == 1 && $1 == --dry-run ) ]] || { echo 'Use --help for usage.' >&2; exit 1; }
+[[ -z $(git status --porcelain) ]] || { echo 'Commit or stash changes first; only a clean committed checkout can be published.' >&2; exit 1; }
+release=$(git rev-parse --short=12 HEAD)
+host=roope@192.168.1.21
+remote_dir=/home/roope/apps/puntti-urpo
+# Read tags from running containers, not a potentially stale local environment file.
+images=$(ssh -o BatchMode=yes "$host" 'cd /home/roope/apps/puntti-urpo && docker inspect --format "{{.Config.Image}}" puntti-urpo-production-backend-1 puntti-urpo-production-web-1')
+backend_image=$(printf '%s\n' "$images" | sed -n '1p')
+web_image=$(printf '%s\n' "$images" | sed -n '2p')
+backend_release=${backend_image#puntti-urpo-backend:}
+web_release=${web_image#puntti-urpo-web:}
+for tag in "$backend_release" "$web_release"; do
+  [[ $tag =~ ^[0-9a-f]{7,40}$ ]] || { echo 'Unrecognized production image tag; use the full release runbook.' >&2; exit 1; }
+  git cat-file -e "$tag^{commit}"
+done
+if ! git diff --quiet "$backend_release" HEAD -- backend; then
+  echo 'Backend changes require the full release/backup workflow in deploy/README.md.' >&2; exit 1
+fi
+# Infrastructure changes need full release review. Permit the WEB_RELEASE fallback
+# introduced with this helper; all other Compose changes are rejected.
+if ! git diff --quiet "$web_release" HEAD -- deploy/backend.Dockerfile deploy/frontend.Dockerfile deploy/nginx.conf .dockerignore; then
+  echo 'Container/proxy changes require the full release workflow.' >&2; exit 1
+fi
+comparison=$(mktemp)
+trap 'rm -f "$comparison"' EXIT
+git show "$web_release:deploy/compose.yaml" | sed 's/image: puntti-urpo-web:${RELEASE:?required}/image: puntti-urpo-web:${WEB_RELEASE:-${RELEASE:?required}}/' > "$comparison"
+if ! cmp -s "$comparison" deploy/compose.yaml; then
+  echo 'Compose changes require the full release workflow.' >&2; exit 1
+fi
+printf 'Frontend %s -> %s; backend remains %s.\n' "$web_release" "$release" "$backend_release"
+[[ ${1:-} != --dry-run ]] || { echo 'Dry run passed; production was not changed.'; exit 0; }
+(cd frontend && npm ci && npm run check && npm run build)
+staging=$(ssh -o BatchMode=yes "$host" 'umask 077; mktemp -d /home/roope/apps/puntti-urpo/.publish-XXXXXXXX')
+[[ $staging =~ ^/home/roope/apps/puntti-urpo/\.publish-[a-zA-Z0-9]+$ ]] || { echo 'Unexpected staging path.' >&2; exit 1; }
+cleanup() {
+  rm -f "$comparison"
+  ssh -o BatchMode=yes "$host" "rm -rf -- '$staging'" || true
+}
+trap cleanup EXIT
+git archive HEAD | ssh -o BatchMode=yes "$host" "tar -xf - -C '$staging'"
+ssh -o BatchMode=yes "$host" bash -s -- "$staging" "$release" "$backend_image" "$web_image" <<'REMOTE'
+set -euo pipefail
+umask 077
+staging=$1
+release=$2
+expected_backend=$3
+old_web=$4
+cd /home/roope/apps/puntti-urpo
+# Serialize publishers; never remove another publisher's lock.
+exec 9>.publish.lock
+flock -n 9 || { echo 'Another publish is running.' >&2; exit 1; }
+[[ $(docker inspect --format '{{.Config.Image}}' puntti-urpo-production-backend-1) == "$expected_backend" && $(docker inspect --format '{{.Config.Image}}' puntti-urpo-production-web-1) == "$old_web" ]] || { echo 'Production changed during preflight; retry.' >&2; exit 1; }
+backend_release=${expected_backend#puntti-urpo-backend:}
+export RELEASE=$backend_release WEB_RELEASE=$release
+# Build in staging before touching running configuration or containers.
+docker compose --env-file "$PWD/.env" -f "$staging/deploy/compose.yaml" config --quiet
+docker compose --env-file "$PWD/.env" -f "$staging/deploy/compose.yaml" build --pull web
+# Record frontend separately: full app RELEASE and database configuration stay intact.
+set_web_release() {
+  sed '/^WEB_RELEASE=/d' .env > .env.publish.tmp
+  printf '\nWEB_RELEASE=%s\n' "$1" >> .env.publish.tmp
+  chmod 600 .env.publish.tmp
+  mv .env.publish.tmp .env
+}
+activated=false
+rollback() {
+  status=$?
+  if [[ $status != 0 && $activated == true ]]; then
+    echo 'Verification failed; restoring the previous frontend image.' >&2
+    export WEB_RELEASE=${old_web#puntti-urpo-web:}
+    set_web_release "$WEB_RELEASE"
+    docker compose --env-file .env -f deploy/compose.yaml up -d --no-deps --no-build --wait --wait-timeout 90 web || echo 'Rollback needs attention; inspect this project only.' >&2
+  fi
+  exit "$status"
+}
+trap rollback EXIT
+# Archive contains tracked source only; secrets/backups are never replaced.
+tar -C "$staging" -cf - . | tar -xf -
+activated=true
+set_web_release "$release"
+docker compose --env-file .env -f deploy/compose.yaml up -d --no-deps --no-build --wait --wait-timeout 90 web
+curl -fsS --max-time 15 http://127.0.0.1:8106/healthz >/dev/null
+[[ $(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' http://127.0.0.1:8106/api/auth/me) == 401 ]]
+curl -fsS --max-time 20 https://puntti-urpo.iltapaska.com/ | grep 'lang="fi"' >/dev/null
+[[ $(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://puntti-urpo.iltapaska.com/api/auth/me) == 401 ]]
+[[ $(docker inspect --format '{{.Config.Image}}' puntti-urpo-production-backend-1) == "$expected_backend" ]]
+trap - EXIT
+printf 'Published frontend %s at https://puntti-urpo.iltapaska.com\nBackend/database were not restarted. Check your copy in the browser.\n' "$release"
+REMOTE
