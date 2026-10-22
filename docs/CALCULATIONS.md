@@ -4,7 +4,7 @@
 
 Milestone 4 adds derived `estimates` to every set response, including nested workout/exercise reads. Calculations live in `backend/src/main/java/com/punttiurpo/domain/TrainingCalculations.java`; the immutable result is `SetEstimates.java`. The mapper supplies scalar values rather than handing persistence entities into the calculator. There is no database access, Spring dependency or stored estimate column in this domain code.
 
-Read-only estimates are recalculated from the current recorded set on every response. Existing rows need no migration or backfill. Updating a set changes its estimates immediately; an estimate is not another editable input. This milestone does not create personal-record tracking, progression statistics, load recommendations or a frontend.
+Read-only estimates are recalculated from the current recorded set on every response. Existing rows need no migration or backfill. Updating a set changes its estimates immediately; an estimate is not another editable input. The calculation milestone does not create personal-record tracking, progression statistics or load recommendations. Milestone 5 now displays these server estimates in the React UI.
 
 ## RPE and approximate RIR
 
@@ -16,7 +16,7 @@ The result has one decimal place: RPE 10 → 0.0, 9 → 1.0, 8 → 2.0 and 8.5 �
 
 The RIR-based scale's original study compared experienced and novice squatters and mapped RPE to reported repetitions remaining. It does not make individual RIR objectively measured or validate every exercise. [Zourdos et al. (2016), primary study](https://pubmed.ncbi.nlm.nih.gov/26049792/).
 
-Suggested Finnish UI explanation: “RPE kuvaa omaa arviotasi sarjan rasittavuudesta. RPE 10 ≈ 0, RPE 9 ≈ 1 ja RPE 8 ≈ 2 toistoa varastossa. RIR on likiarvo, ei mitattu tulos.” The request schema in Swagger includes this explanation; frontend controls arrive in Milestone 5.
+Suggested Finnish UI explanation: “RPE kuvaa omaa arviotasi sarjan rasittavuudesta. RPE 10 ≈ 0, RPE 9 ≈ 1 ja RPE 8 ≈ 2 toistoa varastossa. RIR on likiarvo, ei mitattu tulos.” The request schema in Swagger includes this explanation; Milestone 5 frontend controls now render this explanation.
 
 ## Repetition-based Epley estimate
 

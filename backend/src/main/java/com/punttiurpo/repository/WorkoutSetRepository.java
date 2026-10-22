@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
+    java.util.Optional<WorkoutSet> findByIdAndWorkoutExerciseWorkoutOwnerKey(long id, String ownerKey);
     List<WorkoutSet> findByWorkoutExerciseIdOrderBySetOrderAscIdAsc(long workoutExerciseId);
 
     List<WorkoutSet> findByWorkoutExerciseWorkoutIdOrderBySetOrderAscIdAsc(long workoutId);

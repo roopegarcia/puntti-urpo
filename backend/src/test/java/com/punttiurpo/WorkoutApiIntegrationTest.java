@@ -31,6 +31,7 @@ class WorkoutApiIntegrationTest {
 
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
+        AuthenticatedClient.properties(registry);
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
@@ -40,7 +41,7 @@ class WorkoutApiIntegrationTest {
     int port;
     @Autowired
     JdbcTemplate jdbc;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private AuthenticatedClient authenticated;
     private final ObjectMapper json = new ObjectMapper();
 
     @BeforeEach
@@ -276,16 +277,13 @@ class WorkoutApiIntegrationTest {
     }
 
     private long addExercise(String workoutPath) throws Exception {
-        long exerciseId = jdbc.queryForObject("SELECT id FROM exercise WHERE name='Bench Press'", Long.class);
+        long exerciseId = jdbc.queryForObject("SELECT id FROM exercise WHERE name='Penkkipunnerrus'", Long.class);
         return body(send("POST", workoutPath + "/exercises", "{\"exerciseId\":" + exerciseId + "}"), 201).path("id").asLong();
     }
 
     private HttpResponse<String> send(String method, String path, String payload) throws Exception {
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
-                .header("Content-Type", "application/json").timeout(Duration.ofSeconds(20))
-                .method(method, payload == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(payload))
-                .build();
-        return http.send(request, HttpResponse.BodyHandlers.ofString());
+        if (authenticated == null) authenticated = new AuthenticatedClient(port, "owner");
+        return authenticated.send(method, path, payload);
     }
 
     private JsonNode body(HttpResponse<String> response, int expectedStatus) {

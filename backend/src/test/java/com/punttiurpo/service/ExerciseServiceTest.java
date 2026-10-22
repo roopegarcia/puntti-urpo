@@ -19,11 +19,14 @@ import static org.mockito.Mockito.when;
 
 class ExerciseServiceTest {
     private final ExerciseRepository repository = mock(ExerciseRepository.class);
-    private final ExerciseService service = new ExerciseService(repository);
+    private final com.punttiurpo.security.CurrentAccount account = mock(com.punttiurpo.security.CurrentAccount.class);
+    @org.junit.jupiter.api.BeforeEach
+    void authenticatedOwner() { org.mockito.Mockito.when(account.key()).thenReturn("owner"); }
+    private final ExerciseService service = new ExerciseService(repository, account);
 
     @Test
     void missingExerciseHasDomainSpecificFailure() {
-        when(repository.findById(42L)).thenReturn(Optional.empty());
+        when(repository.findVisible(42L, "owner")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.get(42L)).isInstanceOf(ExerciseNotFoundException.class);
     }
 
@@ -31,7 +34,7 @@ class ExerciseServiceTest {
     void builtInExerciseCannotBeModified() {
         Exercise builtIn = mock(Exercise.class);
         when(builtIn.isCustom()).thenReturn(false);
-        when(repository.findById(1L)).thenReturn(Optional.of(builtIn));
+        when(repository.findVisible(1L, "owner")).thenReturn(Optional.of(builtIn));
 
         assertThatThrownBy(() -> service.update(1L, new ExerciseRequest("Muutos", null, null, null, null)))
                 .isInstanceOf(BuiltInExerciseException.class);
@@ -42,7 +45,7 @@ class ExerciseServiceTest {
     @Test
     void customUpdateReplacesOptionalFieldsAndKeepsCustomOrigin() {
         Exercise custom = new Exercise("Vanha", "Luokka", "Rinta", "Laite", "Muistiinpano");
-        when(repository.findById(9L)).thenReturn(Optional.of(custom));
+        when(repository.findVisible(9L, "owner")).thenReturn(Optional.of(custom));
 
         var response = service.update(9L, new ExerciseRequest("  Uusi  ", null, null, null, null));
 

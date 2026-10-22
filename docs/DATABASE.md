@@ -64,7 +64,7 @@ The unique expression index `exercise_name_unique` on `lower(name)` prevents cas
 
 Both files are under `backend/src/main/resources/db/migration/`. Flyway stores applied versions/checksums in `flyway_schema_history`, applies migrations once and validates later starts. Never edit an applied shared migration; add a new version. Clean remains disabled. Hibernate `ddl-auto=validate` checks the mapped table at startup and must never update schema automatically.
 
-Pre-existing databases upgrade by running missing V1–V4 migrations; no volume reset or data deletion is needed. The seed migration is versioned, not a startup routine that overwrites edited data. Future seed corrections require a deliberate migration.
+Pre-existing databases upgrade by running missing V1–V5 migrations; no volume reset or data deletion is needed. The seed migration is versioned, not a startup routine that overwrites edited data. Future seed corrections require a deliberate migration.
 
 ## Transactions and tests
 
@@ -105,4 +105,25 @@ Nested workout reads load catalogue details with an entity graph and all workout
 
 ## Derived values are not persisted
 
-Milestone 4 adds no migration or column. RIR and repetition-based e1RM are computed from recorded values at response-mapping time. The Flyway history remains V1–V4. There are no caches or formula-version backfills to maintain at this stage. Editing a set changes its derived response immediately. Raw kg/repetitions/RPE/completion stay the source data; unavailable estimates remain null rather than being stored as zero.
+Milestone 4 adds no migration or column. RIR and repetition-based e1RM are computed from recorded values at response-mapping time. Milestone 4 left the Flyway history at V1–V4; the later Finnish-name update adds V5. There are no caches or formula-version backfills to maintain at this stage. Editing a set changes its derived response immediately. Raw kg/repetitions/RPE/completion stay the source data; unavailable estimates remain null rather than being stored as zero.
+
+
+## Milestone 5 browser boundary
+
+The frontend adds no migration or database table. V1–V4 remain unchanged. Explicit API saves persist records; unsaved browser input is lost on refresh/navigation if discarded. Browser localStorage holds only the theme, never a copy of workout history. Development UI smoke tests used explicitly named disposable workouts and removed only those records afterward; the existing catalogue/custom records and database volume were preserved.
+
+
+## Finnish built-in names (V5)
+
+V5 translates the ten English built-ins to Finnish using UPDATE restricted to `custom = false` and the known source names. IDs, workout references and all other fields remain unchanged; custom exercises are untouched. V1–V4 are immutable migration history and must not be edited. If a translated name conflicts with an existing custom name under the case-insensitive unique index, PostgreSQL rolls the entire V5 migration back. Resolve that name conflict deliberately; do not delete or silently rename custom records.
+
+The upgrade test migrates V2 → V4, records a workout/set referencing the existing bench ID, then applies V5. It verifies the Finnish catalogue, stable ID/reference, recorded performance, custom row and repeat-startup behavior. A separate schema tests conflict rollback against real PostgreSQL. There are now five applied migrations and 68 backend tests.
+
+
+## Two-account ownership and invented demo (V6)
+
+V6 adds `workout.owner_key` (owner/demo, non-null, indexed with history ordering) and `exercise.owner_key`. Every existing workout/custom exercise is backfilled to owner. Built-ins have null owner and remain shared; custom rows require owner ownership. The fixed account keys match the two externally configured Spring Security principals; there is deliberately no account-registration table or user-management API. Credentials/hashes never enter migrations.
+
+One invented completed demo workout is inserted with its own logged exercise/set. This is versioned seed data, not copied personal history and not reset on every startup. Only read access is exposed for demo. Owner cannot read/mutate demo records through domain APIs. Owner-key columns are internal; DTOs do not expose writable ownership.
+
+The application scopes queries before accessing records. Database checks enforce allowed owner values, but PostgreSQL row-level security is not enabled; a raw database administrator can see both scopes. Backups therefore contain both scopes and require private storage. V1–V5 remain immutable and V6 upgrades in place without resetting the volume. See AUTHENTICATION.md for the full access boundary.

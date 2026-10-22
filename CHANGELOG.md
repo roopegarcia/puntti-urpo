@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Added two manually provisioned session accounts (private owner and read-only demo), BCrypt configuration, CSRF-protected login/logout, generic security errors and a bounded login budget.
+- Added V6 ownership backfill, account-scoped workout/nested/catalogue access and invented demo records; owner and demo cannot access each other's workouts or private custom catalogue data.
+- Added Finnish login/logout, session-expiry recovery that preserves same-account drafts, demo controls and security/integration tests. Local account setup tools/documentation added; deployment remains separate.
+
+- Translated the ten built-in exercises to Finnish with V5, preserving catalogue IDs, custom records and workout references; added PostgreSQL upgrade/data-preservation and conflict-rollback coverage.
+
+- Added the reference-inspired author footer with GitHub, portfolio and blog links, responsive wrapping and theme-aware colors.
+
+- Replaced app header/footer branding with Roope's supplied logo and matched the hero, favicon, empty states and exercise/workout icons to its mark.
+
+### Milestone 5 — Finnish React frontend (2026-10-22)
+
+- Added exact-pinned React/TypeScript/Vite project with lockfile, local proxy, build and test scripts.
+- Added responsive exercise browsing/search/custom editing, workout navigation/creation/metadata/notes, logged exercises and editable/draft/completed sets.
+- Added comma-decimal inputs, optional RPE, next-set copying with cleared effort, finish timing and confirmed deletion.
+- Rendered server-derived approximate RIR and explicitly repetition-based e1RM with visible eligibility/effort warnings; no frontend strength calculation.
+- Added light/dark themes, semantic tokens, original SVG identity, labelled controls, keyboard focus/skip link and responsive numeric entry.
+- Added explicit-save reliability, unsaved/pending navigation guards, stale GET cancellation and partial-creation recovery; fixed browser-observed post-save navigation/focus races.
+- Added 30 frontend tests and semantic accessibility audits, documented manual browser checks and limits, startup commands and source-based learning material. No backend API/schema change, authentication, progression analytics or deployment.
+
 ### Milestone 4 — RPE/RIR and repetition-based e1RM (2026-10-22)
 
 - Added pure BigDecimal training calculations and immutable derived-result/status/warning types, separated from entities and persistence.

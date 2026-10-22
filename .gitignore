@@ -7,3 +7,6 @@
 !.env.example
 backend/target/
 *.log
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

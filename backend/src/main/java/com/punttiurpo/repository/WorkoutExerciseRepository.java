@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 public interface WorkoutExerciseRepository extends JpaRepository<WorkoutExercise, Long> {
+    java.util.Optional<WorkoutExercise> findByIdAndWorkoutOwnerKey(long id, String ownerKey);
     @EntityGraph(attributePaths = "exercise")
     List<WorkoutExercise> findByWorkoutIdOrderByDisplayOrderAscIdAsc(long workoutId);
 

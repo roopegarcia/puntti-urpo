@@ -24,6 +24,7 @@ import com.punttiurpo.repository.ExerciseRepository;
 import com.punttiurpo.repository.WorkoutExerciseRepository;
 import com.punttiurpo.repository.WorkoutRepository;
 import com.punttiurpo.repository.WorkoutSetRepository;
+import com.punttiurpo.security.CurrentAccount;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -32,13 +33,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class WorkoutService {
+    private final CurrentAccount account;
     private final WorkoutRepository workouts;
     private final WorkoutExerciseRepository exercises;
     private final WorkoutSetRepository sets;
     private final ExerciseRepository catalogue;
 
     public WorkoutService(WorkoutRepository workouts, WorkoutExerciseRepository exercises,
-                          WorkoutSetRepository sets, ExerciseRepository catalogue) {
+                          WorkoutSetRepository sets, ExerciseRepository catalogue, CurrentAccount account) {
+        this.account = account;
         this.workouts = workouts;
         this.exercises = exercises;
         this.sets = sets;
@@ -46,7 +49,7 @@ public class WorkoutService {
     }
 
     public WorkoutPage list(int page, int size) {
-        var result = workouts.findAll(PageRequest.of(page, size, Sort.by("date", "id").descending()));
+        var result = workouts.findByOwnerKey(account.key(), PageRequest.of(page, size, Sort.by("date", "id").descending()));
         return new WorkoutPage(result.map(WorkoutMapper::summary).getContent(), result.getNumber(),
                 result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
@@ -68,6 +71,7 @@ public class WorkoutService {
         validateTimes(request);
         Workout workout = new Workout(request.date(), request.title(), request.notes(),
                 request.startedAt(), request.endedAt());
+        workout.assignOwner(account.key());
         return WorkoutMapper.workout(workouts.saveAndFlush(workout), List.of());
     }
 
@@ -89,7 +93,7 @@ public class WorkoutService {
     @Transactional
     public WorkoutExerciseResponse addExercise(long workoutId, AddWorkoutExerciseRequest request) {
         Workout workout = findWorkout(workoutId);
-        Exercise exercise = catalogue.findById(request.exerciseId()).orElseThrow(ExerciseNotFoundException::new);
+        Exercise exercise = catalogue.findVisible(request.exerciseId(), account.key()).orElseThrow(ExerciseNotFoundException::new);
         int order = nextOrder(exercises.maxOrder(workoutId));
         var added = exercises.saveAndFlush(new WorkoutExercise(workout, exercise, order, request.notes()));
         return WorkoutMapper.exercise(added, List.of());
@@ -153,15 +157,15 @@ public class WorkoutService {
     }
 
     private Workout findWorkout(long id) {
-        return workouts.findById(id).orElseThrow(WorkoutNotFoundException::new);
+        return workouts.findByIdAndOwnerKey(id, account.key()).orElseThrow(WorkoutNotFoundException::new);
     }
 
     private WorkoutExercise findExercise(long id) {
-        return exercises.findById(id).orElseThrow(WorkoutNotFoundException::new);
+        return exercises.findByIdAndWorkoutOwnerKey(id, account.key()).orElseThrow(WorkoutNotFoundException::new);
     }
 
     private WorkoutSet findSet(long id) {
-        return sets.findById(id).orElseThrow(WorkoutNotFoundException::new);
+        return sets.findByIdAndWorkoutExerciseWorkoutOwnerKey(id, account.key()).orElseThrow(WorkoutNotFoundException::new);
     }
 
     private static int nextOrder(int current) {

@@ -32,6 +32,7 @@ class ExerciseApiIntegrationTest {
 
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
+        AuthenticatedClient.properties(registry);
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
@@ -43,7 +44,7 @@ class ExerciseApiIntegrationTest {
     @Autowired
     JdbcTemplate jdbc;
 
-    private final HttpClient http = HttpClient.newHttpClient();
+    private AuthenticatedClient authenticated;
     private final ObjectMapper json = new ObjectMapper();
 
     @BeforeEach
@@ -57,8 +58,8 @@ class ExerciseApiIntegrationTest {
         assertThat(catalogue.path("items").size()).isEqualTo(3);
         assertThat(catalogue.path("totalElements").asInt()).isEqualTo(10);
         assertThat(catalogue.path("totalPages").asInt()).isEqualTo(4);
-        JsonNode result = body(send("GET", "/api/exercises?q=BENCH", null), 200);
-        assertThat(result.path("items").get(0).path("name").asText()).isEqualTo("Bench Press");
+        JsonNode result = body(send("GET", "/api/exercises?q=PENKKI", null), 200);
+        assertThat(result.path("items").get(0).path("name").asText()).isEqualTo("Penkkipunnerrus");
         assertThat(body(send("GET", "/api/exercises?q=%25", null), 200)
                 .path("totalElements").asInt()).isZero();
         assertThat(body(send("GET", "/api/exercises?page=99", null), 200).path("items").isEmpty()).isTrue();
@@ -88,17 +89,17 @@ class ExerciseApiIntegrationTest {
 
     @Test
     void rejectsDuplicateNamesAndRollsBackConflictingUpdate() throws Exception {
-        body(send("POST", "/api/exercises", "{\"name\":\"bench press\"}"), 409);
+        body(send("POST", "/api/exercises", "{\"name\":\"penkkipunnerrus\"}"), 409);
         var created = send("POST", "/api/exercises", "{\"name\":\"Oma liike\"}");
         body(created, 201);
         String location = created.headers().firstValue("Location").orElseThrow();
-        body(send("PUT", location, "{\"name\":\"BENCH PRESS\"}"), 409);
+        body(send("PUT", location, "{\"name\":\"PENKKIPUNNERRUS\"}"), 409);
         assertThat(body(send("GET", location, null), 200).path("name").asText()).isEqualTo("Oma liike");
     }
 
     @Test
     void protectsBuiltInExercisesAndDoesNotOfferDeletion() throws Exception {
-        long id = jdbc.queryForObject("SELECT id FROM exercise WHERE name = 'Bench Press'", Long.class);
+        long id = jdbc.queryForObject("SELECT id FROM exercise WHERE name = 'Penkkipunnerrus'", Long.class);
         body(send("PUT", "/api/exercises/" + id, "{\"name\":\"Muutos\"}"), 403);
         body(send("DELETE", "/api/exercises/" + id, null), 405);
         assertThat(body(send("GET", "/api/exercises/" + id, null), 200).path("custom").asBoolean()).isFalse();
@@ -128,7 +129,7 @@ class ExerciseApiIntegrationTest {
     void databaseEnforcesNameIntegrityWithoutRelyingOnHttpValidation() {
         assertThatThrownBy(() -> jdbc.update("INSERT INTO exercise (name) VALUES ('  ')") )
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbc.update("INSERT INTO exercise (name) VALUES ('BENCH PRESS')"))
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO exercise (name) VALUES ('PENKKIPUNNERRUS')"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -142,11 +143,8 @@ class ExerciseApiIntegrationTest {
     }
 
     private HttpResponse<String> send(String method, String path, String payload) throws Exception {
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
-                .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json")
-                .method(method, payload == null ? HttpRequest.BodyPublishers.noBody()
-                        : HttpRequest.BodyPublishers.ofString(payload)).build();
-        return http.send(request, HttpResponse.BodyHandlers.ofString());
+        if (authenticated == null) authenticated = new AuthenticatedClient(port, "owner");
+        return authenticated.send(method, path, payload);
     }
 
     private JsonNode body(HttpResponse<String> response, int expectedStatus) {

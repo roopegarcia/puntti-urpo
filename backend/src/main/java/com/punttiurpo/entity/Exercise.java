@@ -32,6 +32,12 @@ public class Exercise {
     @Column(nullable = false, updatable = false)
     private boolean custom = true;
 
+    @Column(name = "owner_key")
+    private String ownerKey = "owner";
+
+    public String getOwnerKey() { return ownerKey; }
+    public void assignOwner(String ownerKey) { this.ownerKey = ownerKey; }
+
     protected Exercise() {
         // JPA needs a no-argument constructor to reconstruct persisted entities.
     }

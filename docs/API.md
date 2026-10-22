@@ -2,7 +2,7 @@
 
 ## Status and access
 
-Milestone 3 implements local exercise catalogue and workout logging APIs. No authentication or per-user ownership exists yet; `custom` distinguishes custom exercises from built-in catalogue entries, not users. Keep loopback binding and do not publish these write operations before the deployment/authentication milestone.
+Milestone 3 implements local exercise catalogue and workout logging APIs. Session authentication and account-scoped records are now implemented; `custom` distinguishes custom exercises from built-in catalogue entries, not users. Keep loopback binding until production deployment is separately approved.
 
 OpenAPI JSON: `/v3/api-docs`. Swagger UI: `/swagger-ui/index.html`. Springdoc 3.1.1 is pinned for Spring Boot 4 compatibility; HTTP tests verify both endpoints. Generated documentation describes DTOs and validation; this document explains business rules and error cases.
 
@@ -11,7 +11,7 @@ OpenAPI JSON: `/v3/api-docs`. Swagger UI: `/swagger-ui/index.html`. Springdoc 3.
 ```json
 {
   "id": 1,
-  "name": "Bench Press",
+  "name": "Penkkipunnerrus",
   "category": "Moninivelliike",
   "primaryMuscleGroup": "Rinta",
   "equipment": "Levytanko",
@@ -26,7 +26,7 @@ Write bodies contain `name` (required, maximum 100 characters), and optional `ca
 
 ## Browse and search
 
-`GET /api/exercises?q=bench&page=0&size=20` returns HTTP 200:
+`GET /api/exercises?q=penkki&page=0&size=20` returns HTTP 200:
 
 ```json
 {
@@ -84,18 +84,18 @@ Responses never include SQL, rejected field values, exception class names or sta
 
 `GET /actuator/health` returns 200 `{"status":"UP"}` when healthy and 503 `{"status":"DOWN"}` after dependency failure. Internal components and probe groups remain hidden/disabled. Only health is exposed through Actuator, separately from Swagger.
 
-Flyway requires a working database at startup. Initial connection/migration failure stops startup rather than creating a running endpoint returning 503. `/` remains 404; no frontend exists yet.
+Flyway requires a working database at startup. Initial connection/migration failure stops startup rather than creating a running endpoint returning 503. Backend `/` remains 404; the separate frontend runs at `http://127.0.0.1:5175/`.
 
 
 # Workout logging API (Milestone 3)
 
-These endpoints remain local-only and unauthenticated. They record data and now include Milestone 4 read-only per-set RIR/repetition-based e1RM estimates; progression statistics are not implemented. PUT replaces editable fields rather than patching individual fields.
+These endpoints remain local-only and require authentication. They record data and now include Milestone 4 read-only per-set RIR/repetition-based e1RM estimates; progression statistics are not implemented. PUT replaces editable fields rather than patching individual fields.
 
 ## A first workout through Swagger
 
 Use a normal browser; the VS Code in-app browser prevented Swagger request editing in Roope's testing. Expand the operation, click **Try it out**, edit the **request body**, then Execute. Response examples remain read-only.
 
-1. `GET /api/exercises?q=bench` and copy the returned exercise ID. Do not assume catalogue IDs or use the workout ID in its place.
+1. `GET /api/exercises?q=penkki` and copy the returned exercise ID. Do not assume catalogue IDs or use the workout ID in its place.
 2. `POST /api/workouts` with `{"date":"2026-10-22","title":"Testiharjoitus"}`. Copy the returned workout ID.
 3. `POST /api/workouts/{id}/exercises` with `{"exerciseId":1}` using the actual catalogue ID from step 1. Copy the returned **logged-exercise ID**, which differs from the catalogue ID.
 4. `POST /api/workout-exercises/{id}/sets` using the logged-exercise ID and the example below.
@@ -145,7 +145,7 @@ Fields: `setOrder` integer 0–1,000,000 (unique per logged exercise); `weightKg
 
 RPE is a subjective exertion entry, not measured performance. Weight is recorded exactly as entered in kg; there is no automatic per-hand multiplication for dumbbells. Milestone 4 now derives approximate RIR and repetition-based e1RM; RPE-adjusted maxima and volume/progression aggregation remain unimplemented. Changing a custom catalogue name changes the name shown for its references; no historical name snapshot is stored.
 
-Validation violations, invalid timestamps/enum values and incomplete completed sets return 400. Missing workout/entry/set or catalogue IDs return 404. Duplicate sibling order or database integrity conflicts return 409 with no partial update. Delete endpoints are actual data deletion, with no undo/trash system; use disposable workouts for testing. Authentication/ownership checks remain required before exposing any of this beyond loopback.
+Validation violations, invalid timestamps/enum values and incomplete completed sets return 400. Missing workout/entry/set or catalogue IDs return 404. Duplicate sibling order or database integrity conflicts return 409 with no partial update. Delete endpoints are actual data deletion, with no undo/trash system; use disposable workouts for testing. Ownership checks also apply to nested reads and mutations; foreign or missing IDs both return 404.
 
 
 # Derived set estimates (Milestone 4)
@@ -170,3 +170,22 @@ Unavailable e1RM is null, with first-applicable reason `NOT_COMPLETED`, `NOT_WOR
 Use the Finnish label “Toistomäärään perustuva e1RM-arvio (ei RPE-korjattu)”; never label it as a measured maximum or record. The Swagger request schema explains the RPE scale and the response schema describes the estimate limitations. Numeric JSON formatting may omit trailing zeros; clients should format kg for display without treating decimal places as prediction accuracy.
 
 No new endpoint, database column or migration is required. Existing sets calculate on read, and updates refresh estimates immediately. [CALCULATIONS.md](CALCULATIONS.md) defines the exact policy, restrictions and separately documented RPE-aware research candidate (not implemented).
+
+
+## Milestone 5 client
+
+The Finnish React UI consumes the existing endpoints without changing their contracts. Relative `/api` requests go through the loopback Vite proxy; Swagger stays on Java port 8080. Explicit saves send full PUT payloads for the edited resource. Set ordering is preserved by omitting `setOrder` on replacement; metadata saves preserve unchanged timestamps, including sub-minute precision. Displayed decimal commas are normalized to JSON numbers at the client boundary; Java BigDecimal and PostgreSQL numeric remain authoritative for storage/calculation. Derived estimates remain read-only.
+
+Creating a logged exercise and its first draft set is two HTTP requests, not an atomic batch. If the second fails, the persisted entry remains visible with an error and an Add set action. A connection failure can mean the write succeeded but the response was lost; refresh and inspect before repeating it. There is no idempotency key, optimistic version field, offline queue or automatic retry. Deletes remain irreversible and cascade as documented above; the UI requires a separate confirmation. All data is still local-only; authenticated account isolation is now enforced.
+
+
+## Session authentication and record isolation
+
+- `GET /api/auth/csrf`: public, returns `{ "token": "…", "headerName": "X-CSRF-TOKEN" }` and establishes a CSRF-protected session. Never cache the response.
+- `POST /api/auth/login`: form-encoded `username=owner|demo&password=…`, plus the CSRF header and session cookie. Success is 204, wrong credentials 401, missing/invalid CSRF 403, exhausted process-wide login budget 429 with Retry-After. No signup endpoint exists.
+- `GET /api/auth/me`: authenticated, returns `{ "username": "owner", "readOnly": false }` or demo/true.
+- `POST /api/auth/logout`: authenticated, requires CSRF, returns 204 and invalidates the session/cookie.
+
+Fetch a fresh CSRF token after login/logout; tokens and session identifiers do not go in localStorage. Data reads require a session (401 otherwise). Data mutations require both the owner role and CSRF. The demo gets 403 on writes even with valid CSRF; Swagger/OpenAPI are owner-only. Aggregate health is public and hides internals. Expired-session writes may be rejected with 403 by CSRF before authentication; React checks `/api/auth/me` without replaying the write.
+
+The backend derives the account key from the authenticated principal, never a request owner field. Workout pages and direct workout/entry/set lookups are scoped to that account. Built-ins are shared; owner custom exercises/notes are invisible to demo, including searches and direct IDs. Foreign IDs return 404 rather than revealing existence. All legacy local workouts/custom exercises were assigned to owner; demo gets invented seed data only. `owner_key` is internal and is not added to DTOs. See [AUTHENTICATION.md](AUTHENTICATION.md) for actual cookie-based curl and Swagger setup; older domain-payload examples above require that authentication setup first.

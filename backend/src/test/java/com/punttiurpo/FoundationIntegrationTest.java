@@ -31,6 +31,7 @@ class FoundationIntegrationTest {
 
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
+        AuthenticatedClient.properties(registry);
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
@@ -57,7 +58,7 @@ class FoundationIntegrationTest {
 
     @Test
     void appliesCatalogueMigrationsAndValidatesSchema() {
-        assertThat(flyway.info().applied()).hasSize(4);
+        assertThat(flyway.info().applied()).hasSize(6);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(jdbc.queryForList("""
                 SELECT tablename FROM pg_tables

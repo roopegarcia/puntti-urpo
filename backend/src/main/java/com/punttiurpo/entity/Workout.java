@@ -26,6 +26,12 @@ public class Workout {
     @Column(name = "ended_at")
     private Instant endedAt;
 
+    @Column(name = "owner_key")
+    private String ownerKey = "owner";
+
+    public String getOwnerKey() { return ownerKey; }
+    public void assignOwner(String ownerKey) { this.ownerKey = ownerKey; }
+
     protected Workout() {
     }
 

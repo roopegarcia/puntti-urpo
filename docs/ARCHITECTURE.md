@@ -1,6 +1,6 @@
 # Architecture
 
-## Implemented through Milestone 4
+## Implemented through Milestone 5
 
 A JVM process runs Spring Boot, embedded Tomcat, Web MVC, Actuator, Spring Data JPA/Hibernate, JDBC/HikariCP and Flyway. PostgreSQL runs in this project's separate Compose stack. Configuration remains environment-based and local-only.
 
@@ -34,7 +34,7 @@ For PUT, the service loads a managed entity, rejects built-in origin, updates it
 
 ## Startup, health and logs
 
-Startup begins in `PunttiUrpoApplication`. Flyway applies V1 (exercise schema), V2 (historical seeds), V3 (ten requested exercise names) and V4 (workout domain); Hibernate then validates its mappings against the migrated schema. It never creates or updates tables. Later startups validate history instead of reseeding.
+Startup begins in `PunttiUrpoApplication`. Flyway applies V1 (exercise schema), V2 (historical seeds), V3 (ten requested exercise names) V4 (workout domain) and V5 (Finnish built-in names); Hibernate then validates its mappings against the migrated schema. It never creates or updates tables. Later startups validate history instead of reseeding.
 
 Actuator performs aggregate dependency checks and returns only UP/DOWN status. Database outages after startup produce 503 while the JVM remains alive; initial migration/connection failures stop startup. JDBC and pool timeouts bound stalls. Operational details remain private. Console logs use Spring Boot's ECS JSON format, and unexpected API errors are logged centrally without leaking internals in responses.
 
@@ -42,7 +42,7 @@ Actuator performs aggregate dependency checks and returns only UP/DOWN status. D
 
 Unit tests cover request normalization/validation boundaries and service rules using Mockito repository doubles. The subclass mock maker avoids runtime Java-agent attachment; it cannot mock final classes, which these tests do not require. Integration tests use full HTTP servers and real disposable PostgreSQL containers for migrations, constraints, rollback, search, validation, seed protection, health outage/recovery and OpenAPI/UI compatibility.
 
-Authentication, ownership, progression aggregation and frontend UI remain future milestones. Per-set RIR/repetition-based e1RM estimates are implemented in Milestone 4. Workout references and deletion boundaries are implemented as documented below. Metadata remains free text; search uses database substring matching rather than a search engine. See the decision log for trade-offs.
+Session authentication and account scoping are implemented; progression aggregation remains a future milestone. The React frontend is implemented as described below. Per-set RIR/repetition-based e1RM estimates are implemented in Milestone 4. Workout references and deletion boundaries are implemented as documented below. Metadata remains free text; search uses database substring matching rather than a search engine. See the decision log for trade-offs.
 
 
 ## Workout domain and nested reads
@@ -73,3 +73,35 @@ Cross-field rules live in WorkoutService (time range, completed-set requirements
 WorkoutMapper invokes the calculator while mapping each set. This single path serves creation, replacement, single reads and nested reads, avoiding divergent formulas or stale stored results. No metric columns, migration, backfill, external request or calculation-library dependency is introduced. Unit tests prove arithmetic and boundaries independently of Spring; integration tests prove serialization and current-data recalculation through real HTTP/PostgreSQL paths.
 
 Estimated RIR uses 10 − RPE; e1RM uses Epley with the documented single-rep convention, final-only decimal rounding and explicit eligibility. These do not adjust repetitions using RIR. Future charts must preserve method labels and exclude unavailable values rather than treating null as zero. See CALCULATIONS.md for applicability and the separate unimplemented research candidate.
+
+
+## React boundary (Milestone 5)
+
+```mermaid
+flowchart LR
+    Browser[React forms and transient drafts] -->|relative /api JSON| Vite[Loopback Vite dev proxy]
+    Vite -->|HTTP| Spring[Spring MVC controllers]
+    Spring --> Service[Transactional Java services]
+    Service --> DB[(PostgreSQL)]
+    Service --> Mapper[WorkoutMapper]
+    Mapper --> Calc[Pure BigDecimal calculations]
+    Mapper --> DTO[Response DTOs including estimates]
+    DTO --> Browser
+```
+
+The proxy is development infrastructure, not a new domain layer. Production routing is deferred. React never connects to PostgreSQL and never reimplements strength calculations. `src/types.ts` describes JSON shapes, not managed entities; TypeScript types disappear at runtime. Server validation and database constraints remain authoritative.
+
+`App.tsx` owns hash navigation, theme and unsaved/pending guards. `WorkoutList`, `ExerciseLibrary`, `WorkoutEditor` and `SetRow` separate screens and form ownership. `hooks.ts` cancels stale GET requests and tracks local pending/dirty forms. Each mutation merges only its changed subtree so another row's draft is preserved. Successful creates/deletes explicitly permit their follow-up navigation, avoiding a race with React's form cleanup; ordinary navigation still checks unsaved work. An initial exercise plus first set requires two API writes: partial success is displayed and recoverable rather than hidden or automatically repeated.
+
+`api.ts` bounds requests at 15 seconds and translates ProblemDetail errors. Mutations are not automatically retried because a lost response does not prove the write failed. `utils.ts` handles locale text, dates and payloads; the Java calculation policy remains the sole source of estimates. See [FRONTEND.md](FRONTEND.md) for alternatives, concurrency/offline limits and test coverage.
+
+
+## Two-account security boundary
+
+`security/SecurityConfig` defines two manually configured BCrypt-backed principals through Spring Security; no account is created by HTTP. Its filter chain supplies form login/session fixation protection, CSRF and logout, JSON security errors, owner-only mutation/Swagger access, and authenticated data reads. `SessionController` returns masked CSRF tokens and current account metadata. `LoginRateLimitFilter` provides a bounded process-wide login budget without trusting forwarded client headers. Session cookies are HttpOnly/SameSite=Strict/Secure by default; local HTTP explicitly overrides Secure.
+
+`CurrentAccount` reads the authenticated principal. WorkoutRepository scopes pages/workout IDs; nested repositories traverse workout ownership for entry/set IDs. Services validate access before loading response children or changing data. Exercise queries return built-ins plus owner-visible custom records. V6 backfills legacy data to owner and seeds one invented demo session. `owner_key` is a stable two-value key, not an externally supplied DTO field. Database checks limit allowed owners; application queries provide row access control. PostgreSQL row-level security is not enabled.
+
+React `AuthGate` loads identity before mounting data screens, sends session-backed CSRF headers for writes, refreshes tokens after login/logout, and clears private UI on logout/account change. An expired session hides the mounted App behind reauthentication so same-account unsaved drafts can survive; no write is automatically retried. Different accounts remount App. Demo UI disables/hides mutation controls, but actual enforcement is in Spring Security and account-scoped repository access.
+
+The requested two accounts use one application/database with explicit row scoping. This differs from the earlier suggested separate deployment/database demo: it reduces local/NUC process overhead, but both accounts share the service/database blast radius. Separate deployments remain a stronger future deployment option. See AUTHENTICATION.md for limits and verification.

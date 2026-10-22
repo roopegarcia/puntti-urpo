@@ -1,6 +1,6 @@
 # Java for Roope
 
-This tutorial grows with Puntti-Urpo. You already know PHP, JavaScript, SQL and web development; the aim is to connect that experience to Java without hiding how the application works. Exercises are optional experiments: restore changes after trying them. Understanding has not yet been assessed. Milestones 1–4 are implemented; study them at your own pace. The sections follow the order concepts were introduced. Sections 1–6 introduce the original startup foundation; sections 7 onward explain the database, health checks and tests added afterward. Follow the README database/environment setup before running the application examples below.
+This tutorial grows with Puntti-Urpo. You already know PHP, JavaScript, SQL and web development; the aim is to connect that experience to Java without hiding how the application works. Exercises are optional experiments: restore changes after trying them. Understanding has not yet been assessed. Milestones 1–5 are implemented; study them at your own pace. The sections follow the order concepts were introduced. Sections 1–6 introduce the original startup foundation; sections 7 onward explain the database, health checks and tests added afterward. Follow the README database/environment setup before running the application examples below.
 
 ## 1. Java, the JVM and the JDK
 
@@ -682,7 +682,7 @@ The record is immutable at the component-reference level. A normal list could st
 
 The calculator adds effort warnings instead of changing the Epley arithmetic using subjective RIR. At the same kg/reps, RPE 8.5 and RPE 10 produce the same repetition-based e1RM; estimated RIR and warnings differ. Missing effort is not inferred to mean maximal effort. A single always adds SINGLE_REPETITION_NOT_VERIFIED_MAXIMUM.
 
-These enum codes are suitable for stable API behavior; the frontend milestone must render understandable Finnish text and the label “Toistomäärään perustuva e1RM-arvio (ei RPE-korjattu)”. The current Swagger schema explains the meaning. General exercise/equipment limitations still apply even when the warning list is empty.
+These enum codes are suitable for stable API behavior; the Milestone 5 frontend renders understandable Finnish text and the label “Toistomäärään perustuva e1RM-arvio (ei RPE-korjattu)”. The current Swagger schema explains the meaning. General exercise/equipment limitations still apply even when the warning list is empty.
 
 **Why it matters:** correct arithmetic can still communicate the wrong claim. A subjective rating, prediction and measured personal record are different kinds of information.
 
@@ -711,3 +711,105 @@ HTTP/PostgreSQL tests verify that actual JSON responses agree across POST, PUT, 
 3. Why does changing RPE change warnings/RIR but not the current repetition-based Epley value?
 
 Suggested exercise: in a disposable workout compare a completed 100 kg × 6 set at RPE 8.5 and 10, a completed 11-rep set, and a draft. Explain the estimates/status/warnings from the pure function, then remove only your disposable workout. No RPE-adjusted formula or frontend is included; stop before Milestone 5 until approved.
+
+## 36. Following a React save into Java
+
+Milestone 5 is now implemented. The earlier Milestone 4 stop above records that milestone's review boundary; the user subsequently approved the frontend. No new Java production class was needed: the UI exercises the same controllers, DTOs, services, mapper and calculation functions you already studied.
+
+Start with `frontend/src/components/SetRow.tsx`: the editable `SetDraft` holds strings so a comma decimal or an incomplete field can remain visible while typing. `frontend/src/utils.ts` validates and normalizes them into `SetInput`; `frontend/src/api.ts` serializes JSON and sends PUT. This is comparable to a TypeScript form calling a PHP REST endpoint, except the server target is a Java process.
+
+Follow the request into `backend/src/main/java/com/punttiurpo/dto/WorkoutSetRequest.java`, then `service/WorkoutService.java` and `mapper/WorkoutMapper.java` under the same package root. The request record and Bean Validation enforce server rules; the service loads/updates the managed entity inside a transaction; the mapper returns a response record containing estimates from `domain/TrainingCalculations.java`. React renders that response. The request and response are DTOs, not shared objects across the network.
+
+**Why it matters:** React's TypeScript types disappear after compilation. They cannot prevent another HTTP client from sending invalid JSON. Java validation and SQL constraints protect all clients. React is also not a second place to maintain the Epley formula.
+
+**Exercise:** use browser Network tools to inspect one completed-set PUT at 82.25 kg × 6 and RPE 8.5. Find the matching request fields and response estimates in the Java records.
+
+**Verify:** JSON uses numeric 82.25 even when the input displayed `82,25`; the server returns RIR 1.5, repetition-based e1RM 98.70 and its submaximal-effort warning. Changing RPE affects effort/warnings, not the current Epley result. No formula should appear in the TypeScript input helper.
+
+## 37. Build time, runtime and exact numbers at the boundary
+
+`frontend/package.json` and `package-lock.json` manage the browser dependency graph; `backend/pom.xml` and the Maven Wrapper manage the Java graph. `npm run build` checks TypeScript and bundles browser JavaScript/CSS into `frontend/dist/`. It produces neither JVM bytecode nor an executable JAR. `./mvnw verify` compiles Java, tests it and packages the server JAR. Both builds can pass independently while the other process is stopped.
+
+`frontend/vite.config.ts` forwards local `/api` requests to Java, not directly to PostgreSQL. The browser sends JSON numbers; Java's configured deserializer binds decimal values to BigDecimal, and PostgreSQL stores numeric columns. JavaScript Number is used to prepare transport values, never for cumulative strength calculations or exact persistence. `utils.ts` rejects over-precision before sending, and the backend independently validates it.
+
+**Why it matters:** a TypeScript interface resembles the shape of a Java record, but it does not provide constructors, Bean Validation or runtime numeric precision. A successful npm build does not prove Java startup, database connectivity or migration correctness.
+
+**Exercise:** run `npm run check` and `npm run build` from `frontend/`, then inspect a set DTO and `TrainingCalculations` in Java. Explain which system rejects three kg decimals and which calculates/rounds e1RM.
+
+**Verify:** frontend checks pass, `dist/` is generated and ignored; a real API request with invalid precision is rejected independently of the UI. Do not modify applied migrations or reset the development volume for this exercise.
+
+## 38. Form state is not a transaction
+
+In `frontend/src/components/WorkoutEditor.tsx`, adding an exercise and its first draft set makes two requests. Each request reaches its own transactional Java service method. A transaction around one request cannot roll back an already committed earlier request if the next request fails. This resembles two independent PHP HTTP calls, not one SQL transaction shared through a browser.
+
+The UI therefore keeps a successfully created exercise visible if creating its first set fails. It does not retry blindly. Likewise, a network timeout may happen after Java committed the write. `api.ts` explicitly avoids automatic mutation retries, and `hooks.ts` ignores obsolete GET responses. These are client reliability rules, not replacements for `@Transactional`.
+
+**Why it matters:** local React draft state, a successful HTTP response and a committed database row are three distinct facts. Unsaved-navigation prompts help prevent accidental loss, but are not persistence or backups. Concurrent tabs still have no optimistic version check.
+
+**Exercise:** read the frontend test named “keeps the persisted logged exercise visible when creating its first set fails” in `frontend/src/App.test.tsx`. Trace where the two Java requests would commit; explain why removing the entry from React would misrepresent saved data.
+
+**Verify:** run `npm run check`; the test confirms the saved exercise remains visible with an error and an Add set recovery action. The mocked test proves UI behavior; the existing Java PostgreSQL tests prove transaction/database behavior separately. Neither establishes that Roope has already learned the concept.
+
+## Milestone 5 review questions and exercise
+
+1. Why must Java validate the set request even though TypeScript checks its shape?
+2. Where does a set's e1RM come from, and why is there no Epley formula in React?
+3. Why are two HTTP requests two transaction boundaries rather than one shared transaction?
+
+Suggested exercise: create a disposable workout in the UI, add Bench Press and complete 82.25 kg × 6 at RPE 8.5. Add a next set, verify copied values/blank RPE, change it to 11 reps and complete it. Explain the available RIR and unavailable e1RM using the Java code. Reload to prove explicit saves persisted; delete only your disposable workout when finished. Stop before Milestone 6 until approved.
+
+
+## 39. A name change is still a migration
+
+`backend/src/main/resources/db/migration/V5__translate_builtin_exercise_names_to_finnish.sql` changes catalogue names, not exercise identity. SQL UPDATE retains primary keys, so `workout_exercise.exercise_id` still refers to the same row. The service/mapper automatically return its new Finnish name. Unlike a frontend-only translation map, this also keeps API search and Swagger consistent.
+
+Applied V1–V4 files remain unchanged: Flyway checks their history/checksums. This is similar to adding a new PHP database migration instead of rewriting a migration that has already run on another installation. The unique-name index still applies to both custom and built-in records. A conflicting custom name causes PostgreSQL to roll the whole migration back; preserving user data is preferable to silently renaming or deleting it.
+
+**Why it matters:** display names are editable attributes, not stable relational identity. Replacing rows can break references; renaming them in place preserves the graph.
+
+**Exercise:** read `CatalogueMigrationIntegrationTest` and trace the stored bench ID from the original Finnish seed through the English V3 names to Finnish V5. Identify the separate conflict test.
+
+**Verify:** `./mvnw verify` checks unchanged ID/reference, existing workout/set performance and custom data. The conflict case leaves every catalogue row unchanged. Do not edit applied migrations or manufacture a conflict in your everyday database.
+
+
+## 40. Authentication, authorization and the Spring filter chain
+
+`backend/src/main/java/com/punttiurpo/security/SecurityConfig.java` creates `@Bean` objects for a BCrypt encoder, two configured users and a `SecurityFilterChain`. Authentication establishes who is logged in; authorization decides which operations that principal may perform. A username alone proves neither. Owner has write rights; demo has read-only rights. Shared role checks run before controller methods, including when someone calls the API directly instead of using React.
+
+Spring's form-login filter checks the password with an adaptive hash, manages session fixation protection and stores authentication in a server-side session. The browser receives an HttpOnly cookie, not a Java object or plaintext password. `SessionController` supplies a masked CSRF token to React, which sends it back for unsafe requests. CSRF protects cookie-authenticated requests from being initiated by another site; it does not replace account/record authorization. Familiar PHP session authentication has the same broad separation of cookie identifier and server session data.
+
+**Why it matters:** hiding a button is a UX decision. The security filter and repository rules protect data even when UI checks are bypassed. Sessions/CSRF are configured through framework APIs rather than custom credential/token code.
+
+**Exercise:** read the matcher order in SecurityConfig. Predict the responses for anonymous catalogue GET, demo workout POST with valid CSRF, owner POST without CSRF and owner Swagger GET.
+
+**Verify:** the HTTP security tests assert 401, 403, 403 and owner access respectively. Existing HTTP tests now log in through actual cookies/CSRF using `AuthenticatedClient`; they do not disable the filter chain.
+
+## 41. The authenticated principal defines record scope
+
+`security/CurrentAccount.java` reads Spring's current authenticated principal. `service/WorkoutService.java` passes its account key into scoped repository queries for lists, workouts, logged exercises and sets. For a set, the query follows `set → logged exercise → workout → ownerKey`. This is relationship traversal in Spring Data's derived query method name, comparable to a SQL JOIN with an ownership WHERE clause. Response children are fetched only after the parent has passed ownership validation.
+
+The client cannot choose ownership in `WorkoutRequest`: the service assigns it from CurrentAccount. `ExerciseRepository.findVisible` combines shared built-ins with the owner's custom rows. V6 adds/backfills owner keys without changing existing IDs or performance. The two account keys are fixed by configuration/check constraints; there is no general registration/user entity in this deliberately small version.
+
+**Why it matters:** logging in is not enough if `/api/sets/123` returns anyone's set. Scoped lookups return the same 404 for missing and foreign records. The owner is not an administrator of the demo dataset.
+
+**Exercise:** trace one foreign set GET through security filters, controller, service and repository. Explain why demo receives 404 for the owner's set but 403 for any attempted mutation.
+
+**Verify:** `SecurityIntegrationTest` creates an owner workout/entry/set, checks both account directions, hidden custom exercise searches and an attempted owner-key spoof. Migration tests verify existing records belong to owner and only invented seed records belong to demo.
+
+## 42. Configuration and credentials are different kinds of state
+
+`SecurityConfig.accounts` requires two BCrypt hashes from environment configuration. `backend/tools/ProvisionAccounts.java` generates random local passwords, stores hashes in ignored `.env` and writes a 0600 ignored `.env.accounts` handoff. It is a standalone Java source-launcher utility, not part of application startup or a Flyway migration. `HashPassword.java` provides an interactive no-echo hashing command for deliberate rotation. No registration or email recovery endpoint exists.
+
+Passwords are long-term secrets; sessions are temporary credentials; recorded workouts are domain data. Restarting Java invalidates process-local sessions without deleting workouts. Updating an environment file does not mutate an already running Java process, so rotation requires re-exporting/restarting. Unlike browser TypeScript build variables, backend environment variables do not automatically become public JavaScript. Neither secrets nor private backups belong in Git.
+
+**Exercise:** inspect `.env.example`, the two tools and AUTHENTICATION.md without printing your real credentials. Identify where each category of state is stored.
+
+**Verify:** Java refuses to start without valid distinct hashes; Git ignores credential handoff/configuration and the pre-auth local backup. The production Secure-cookie default is true, and only local HTTP configuration overrides it. Do not rotate passwords merely to complete this reading exercise.
+
+## Two-account review questions and exercise
+
+1. How do authentication, role authorization and record ownership checks differ?
+2. Why does the service use the authenticated account rather than a JSON owner key?
+3. Why must React obtain a new CSRF token after login, and why should a failed write not be replayed automatically?
+
+Exercise: in separate normal/private browser sessions, log in as owner and demo. Create one disposable owner workout and try opening its URL as demo. Explain the 404, the separate demo list, and the disabled demo controls using the Java code. Remove only your disposable owner workout. Understanding has not yet been demonstrated; this is a review exercise after implementation.

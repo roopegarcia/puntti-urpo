@@ -1,5 +1,89 @@
 # Learning log
 
+## 2026-10-22 — Two-account authentication and private records
+
+**Authorization:** Roope explicitly requested one account for actual workouts and one for demonstration. Implemented locally as a private writable owner and a read-only demo, following the discussed access model. No deployment, push or commit was authorized/performed.
+
+**Built:** Boot-managed Spring Security with exactly two configured BCrypt-backed principals (`owner`, `demo`), default-enabled CSRF, form login/logout, session fixation protection, process-local two-hour sessions, HttpOnly/SameSite=Strict cookies named PUNTTI_SESSION, Secure default with local HTTP override, JSON 401/403 responses, owner-only Swagger and a bounded 20-login-attempts/minute process budget. No signup, HTTP Basic, JWT, remember-me or email recovery. Configuration requires distinct hashes and has no production password fallback.
+
+**Privacy:** V6 assigns every legacy workout/custom exercise to owner, adds owner checks/indexes and seeds one entirely invented demo workout/set. Services/repositories scope lists and direct/nested IDs to the authenticated principal; built-ins are shared, custom owner exercises/notes are hidden from demo. Foreign IDs return 404 and demo writes return 403 even with valid CSRF. Request ownership fields cannot choose a different account. This uses one database with application-enforced scoping, not the earlier suggested separate deployment/database; the infrastructure blast radius is shared and PostgreSQL RLS is not enabled.
+
+**Frontend:** Finnish login/account selection, current-account labels, guarded logout, hidden/disabled demo mutation controls, masked CSRF headers and no stored browser credentials/tokens. Session expiry opens reauthentication without replaying writes; same-account drafts remain mounted but hidden, while switching accounts/remount/logout clears private UI. Login uses the saved/system theme. Responsive login was checked in Safari desktop/320px, including generic wrong-password feedback and cleared password input. No real password was entered through browser automation or printed in tool output.
+
+**Tools/documentation:** added standalone Java source-launcher tools for safe local provisioning and interactive rotation. Generated distinct random local passwords, wrote BCrypt hashes to ignored `.env` and the password handoff to ignored `.env.accounts`, both 0600. Provisioning from a fresh `.env.example` was verified, including blank placeholders, one configuration entry per hash and refusal to overwrite existing accounts. Added AUTHENTICATION.md, updated current README/API/database/architecture/deployment/frontend documentation, decisions, AGENTS, changelog and tutorial sections 40–42. No claim is made that Roope already understands the new concepts.
+
+**Actual verification:**
+
+- `./mvnw -B -ntp verify`: 73 tests across ten report classes, zero failures/errors/skips; 45 unit/parameterized and 28 PostgreSQL/integration. Existing HTTP tests now perform real form login/cookie/CSRF rather than bypassing security.
+- New security integration tests verify anonymous read/Swagger denial, health visibility, wrong-password feedback, mandatory CSRF, session rotation, logout invalidation, owner-key spoof prevention, both-direction direct/nested isolation, custom catalogue search/direct-read privacy and role denial across mutation routes. The process-budget unit test verifies the 21st login is blocked while ordinary GETs proceed. Upgrade tests verify legacy owner assignment and one invented demo session.
+- `npm run check`: TypeScript clean and 35 tests passed across five files, including login semantic axe audit, CSRF/form encoding/logout, demo controls and session-expiry draft preservation. Production Vite build succeeded. axe/jsdom is bounded evidence, not full accessibility certification.
+- Before live migration/restart, created ignored `.env.pre-auth-backup.sql` with 0600 and a private comparison snapshot under ignored backend/target. Restarted only the identified Puntti-Urpo Java process; Compose volume and unrelated services were preserved. Packaged JAR applied V6 and serves the authenticated local API.
+- Scripted live cookie login verified both distinct generated passwords, PUNTTI_SESSION/HttpOnly, account identity, owner catalogue/workout responses unchanged against the snapshot, ten built-ins/one invented demo session, demo write denial, missing-CSRF denial, private nested-ID 404s, owner 82.25 kg × 6 at RPE 8.5 returning e1RM 98.70, and logout invalidation. Removed only the explicitly named disposable verification workout afterward; existing personal records were preserved.
+
+**Limits:** public hosting is still unimplemented. NUC inspection, HTTPS/proxy/Secure-cookie validation, production isolation/secrets, complementary trusted-IP login limits and tested backup restore remain required. The local pre-auth dump is a precaution, not a tested production restore solution. Session restart invalidates all logins; the shared process login budget can temporarily delay both accounts under abuse.
+
+**Changed files:** backend pom/config, V6, Exercise/Workout ownership mappings, four repositories/two services; new security classes CurrentAccount, SecurityConfig, SessionController and LoginRateLimitFilter; new AuthenticatedClient, SecurityIntegrationTest and LoginRateLimitTest plus updated migration/foundation/API/service tests; tools ProvisionAccounts/HashPassword; `.env.example`; frontend AuthGate/tests, main/App, api, catalogue/list read-only props, styles and demo/expiry tests; documentation listed above. Local secrets/backups are ignored and not part of the change set.
+
+**Three review questions:** How do authentication, roles and ownership differ? Why is CurrentAccount authoritative over JSON ownership? Why obtain fresh CSRF after login without replaying a failed write?
+
+**Exercise:** use owner and demo in separate browser sessions, create a disposable owner workout and verify its URL is unavailable to demo. Explain the request path from filter chain through scoped repository, then delete only that disposable owner workout. Stop for review; no history/progression or deployment work was started.
+
+---
+
+## 2026-10-22 — Finnish exercise names and publication readiness
+
+**Request:** Roope asked whether the app was ready to publish and requested Finnish exercise names. The prior English-name preference is superseded. Public deployment was not requested or performed.
+
+**Changed:** new V5 in-place rename of the ten built-ins; V1–V4 remain unchanged. IDs, workout references and custom exercises are preserved. Updated catalogue API tests, foundation migration count and the upgrade test; added a PostgreSQL collision-rollback test. Updated frontend fixtures, README catalogue/search, API examples, architecture/database/deployment docs, decisions, changelog, AGENTS and tutorial section 39. The Java API returns the current Finnish catalogue names in both catalogue and nested workout reads.
+
+**Actual verification:** `./mvnw -B -ntp verify` succeeded: 68 cases across eight reports, zero failures/errors/skips (44 unit/parameterized, 24 PostgreSQL/integration). The first run revealed duplicate-name assertions still using the old English spelling; corrected them to Finnish and reran successfully. Upgrade coverage verifies stable IDs/references, saved kg/reps/RPE/workout title, unchanged custom data, all ten names and repeat startup. The separate collision schema confirms every catalogue row remains unchanged when a custom Finnish name blocks V5. `npm run check` passed all 30 frontend tests; production build succeeded. A temporary packaged JAR on a random loopback port applied V5 to the local database and returned healthy status; reads through the existing backend confirmed the ten names and unchanged IDs/custom rows/workout details. Only the temporary process was stopped. `git diff --check` passed.
+
+**Readiness:** local functionality is verified, but public hosting remains blocked by missing authentication/data separation, production packaging/routing and tested backup restoration. NUC inspection (services, ports, memory, AMD64/storage) and explicit deployment approval remain required. History/progression is still Milestone 6. No remote push, NUC or Cloudflare change was made; current changes remain uncommitted.
+
+**Learning check:** Why is V5 added instead of editing V3? Why do workout references survive a rename? What causes the collision test to roll back the whole change? Exercise: read tutorial section 39 and trace one catalogue ID through the upgrade test without changing the everyday database.
+
+
+## 2026-10-22 — Author footer
+
+Roope requested a footer matching the supplied reference, with his four exact destinations. Added `components/Footer.tsx` and replaced the former logo/tagline footer in `App.tsx`. A serif author heading, accurate Java/React description, labelled link navigation with accent arrows, separator and dynamic copyright row follow the reference layout; responsive wrapping and semantic theme tokens support narrow screens and both themes. No Java, API, database, or deployment behavior changed. Frontend documentation and changelog updated. Verification: all 30 frontend tests passed, production build succeeded, and Safari desktop/320px checks confirmed readable layout and all four exact link destinations. Changes remain uncommitted.
+
+
+## 2026-10-22 — Supplied logo applied
+
+Roope supplied a PNG logo and requested replacing all site logos. Preserved the original image/color profile in `frontend/public/logo.png` for header/footer branding. Added a matching vector symbol for the hero, favicon, empty states and exercise/workout icons; the symbol uses the supplied P3 red converted to sRGB (#b9341d). The full logo retains a white surface so its dark wordmark stays readable in both themes. Updated `App.tsx`, `WorkoutList.tsx`, `ExerciseLibrary.tsx`, `Shared.tsx`, `styles.css`, favicon and frontend documentation/changelog. Verified light/dark desktop rendering in Safari; all 30 frontend tests and the production build pass. No data/API/schema changes, commit or deployment.
+
+
+## 2026-10-22 — Milestone 5 complete: Finnish React frontend
+
+**Authorization and commit:** Roope approved committing Milestone 4 and starting the next milestone. Milestone 4 is local commit `4ac57f9` (`Complete milestone 4 training estimates and precision tests`). The frontend milestone is implemented and left uncommitted for review. Nothing was pushed or deployed.
+
+**Built:** a separate exact-pinned React/TypeScript/Vite project; responsive exercise catalogue/search/custom create/edit; paged workout navigation and creation; workout/exercise notes and metadata; draft/completed sets, Finnish decimal entry, optional RPE, append convenience and finish timing; explicit deletion confirmations; server-derived RIR/repetition-based e1RM with visible reasons/warnings; light/dark themes and original SVG identity. Existing APIs, Java production code and migrations are unchanged. Basic listing supports opening the editor; history analysis, comparisons/charts/statistics remain Milestone 6.
+
+**Reliability:** explicit save ownership, no automatic mutation retries, stale GET cancellation, unsaved/pending navigation guards, timestamp precision preservation and merges that retain other row drafts. The saved logged exercise remains visible if creating its first set fails. Real Safari testing exposed an incorrect discard prompt after creation and first-set focus stealing focus after later appends; both were corrected and rechecked, with a focus regression test added. Mobile checking found a hidden-text icon control missing its accessible name and narrow numeric input clipping; explicit labels and two-column small-screen fields fixed these.
+
+**Java concepts reinforced:** JSON DTOs versus entities and TypeScript interfaces, runtime validation versus compile-time shape checking, BigDecimal authority at a JavaScript transport boundary, request-scoped transaction boundaries, mapper-derived response values, and separate npm/browser and Maven/JVM builds. Tutorial sections 36–38 trace the actual frontend-to-Java save flow. No understanding or confusion is inferred from milestone approval; Roope has not yet demonstrated these concepts.
+
+**Actual verification:**
+
+- `npm run check`: TypeScript clean; 30 tests across four files passed, zero failures. Cases include locale/ranges, zero load/null drafts, date/payload preservation, API 204/errors/no retry, set completion/estimates/warnings, failed-input retention, deletion cancellation, unsaved navigation, post-create navigation, metadata precision/unrelated drafts, duplicate-name preservation, partial creation recovery and appended-set focus.
+- axe-core: zero semantic violations on the empty dashboard and populated editor in jsdom. Color contrast is disabled in that non-rendering environment. Manual token contrast calculations: checked text pairs >=5.52:1; input-border contrast 3.65:1 light and 4.78:1 dark. This is bounded evidence, not a full WCAG certificate; physical mobile and screen-reader testing remain follow-up evaluation.
+- `npm run build`: successful TypeScript and Vite production build, 24 modules; JS 255.35 kB (79.21 kB gzip), CSS 22.46 kB (5.28 kB gzip). The separate built preview served HTTP 200 and proxied a real saved workout from Java/PostgreSQL; Safari opened the packaged UI successfully.
+- Safari desktop: create workout, choose Bench Press, enter comma decimal 82.25 kg × 6 at RPE 8.5, complete set, see RIR 1.5 and e1RM 98.70 with SUBMAXIMAL_RPE_NOT_ADJUSTED. Added drafts copied load/reps, cleared RPE/completion and focused the new load field. Keyboard Tab moved from reps to RPE. Deletion confirmation was cancelled and returned focus to its trigger. Both themes rendered.
+- Safari responsive mode: editor inspected at 390px and 320px, library at 320px. After the mobile grid correction the full load remained readable without horizontal clipping. Desktop Brave dashboard was also inspected before moving QA to a separate Safari window while Roope tested Brave.
+- A scripted read through preview confirmed stored numbers and estimate warnings. Only explicitly named disposable workouts IDs 4 and 5 were removed afterward, with names checked before deletion and subsequent 404 verified. Catalogue/custom data was identical before/after cleanup; the database volume and user's running backend were preserved.
+- The local database password was checked for absence from frontend source/lockfile/build without printing it. No frontend credentials were introduced. `git diff --check` passed. An optional npm audit attempt stalled and was cancelled; no completed vulnerability-audit result is claimed.
+- Backend tests were not rerun for this frontend-only milestone; the unchanged Java baseline is the 67 passing tests documented under Milestone 4. Frontend mocked HTTP tests do not replace PostgreSQL integration coverage.
+
+**Changed files:** `.gitignore`, `AGENTS.md`, `README.md`, `CHANGELOG.md`; `docs/API.md`, `ARCHITECTURE.md`, `CALCULATIONS.md`, `DATABASE.md`, `DECISIONS.md`, `DEPLOYMENT.md`, `JAVA-FOR-ROOPE.md`, `LEARNING-LOG.md`; new `docs/FRONTEND.md`. New frontend files: `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `public/favicon.svg`; `src/main.tsx`, `App.tsx`, `api.ts`, `types.ts`, `utils.ts`, `hooks.ts`, `styles.css`; components `Shared.tsx`, `WorkoutList.tsx`, `ExerciseLibrary.tsx`, `WorkoutEditor.tsx`, `SetRow.tsx`; tests `App.test.tsx`, `api.test.ts`, `utils.test.ts`, `components/SetRow.test.tsx`, `test/fixtures.ts`, `test/setup.ts`. Generated node_modules/dist are ignored.
+
+**Three review questions:** Why must Java validate a TypeScript client request? Where are estimates calculated and rounded? Why can the first of two HTTP writes remain committed if the second fails?
+
+**Exercise:** follow the Milestone 5 exercise in JAVA-FOR-ROOPE: create a disposable workout, compare a completed six-rep set and an eleven-rep set, inspect the response, reload and explain the persistence and estimate differences from the Java source.
+
+**Review state:** Milestone 5 implemented and locally verified. Stop before Milestone 6 until explicitly approved. Authentication, NUC inspection and deployment remain unimplemented; no changes to other services or Cloudflare routing.
+
+---
+
 ## 2026-10-22 — Milestone 4 complete: RPE/RIR and repetition-based e1RM
 
 **Authorization and commit:** Roope explicitly approved committing the previous milestones and proceeding. Milestones 2–3 are now local commit `5cd7805` (`Complete exercise catalogue and workout logging milestones`), following Milestone 1 commit `34a5e14`. Milestone 4 changes remain uncommitted for review. Nothing was pushed or deployed.

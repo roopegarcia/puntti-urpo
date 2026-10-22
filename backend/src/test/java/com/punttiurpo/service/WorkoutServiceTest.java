@@ -20,7 +20,10 @@ class WorkoutServiceTest {
     private final WorkoutExerciseRepository exercises = mock(WorkoutExerciseRepository.class);
     private final WorkoutSetRepository sets = mock(WorkoutSetRepository.class);
     private final ExerciseRepository catalogue = mock(ExerciseRepository.class);
-    private final WorkoutService service = new WorkoutService(workouts, exercises, sets, catalogue);
+    private final com.punttiurpo.security.CurrentAccount account = mock(com.punttiurpo.security.CurrentAccount.class);
+    @org.junit.jupiter.api.BeforeEach
+    void authenticatedOwner() { org.mockito.Mockito.when(account.key()).thenReturn("owner"); }
+    private final WorkoutService service = new WorkoutService(workouts, exercises, sets, catalogue, account);
 
     @Test
     void rejectsEndWithoutStartBeforePersisting() {

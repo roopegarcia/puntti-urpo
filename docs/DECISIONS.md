@@ -207,3 +207,53 @@ Compatibility references: [Spring SQL/JPA documentation](https://docs.spring.io/
 **Reasoning:** prevents missing/unfit values from looking like zero strength, bounds the initial repetition range and avoids premature division rounding. AVAILABLE means policy eligibility, not universal exercise validity. The cutoff/warmup rule is a conservative product choice; no blanket exercise-specific scientific validation is claimed.
 
 **Trade-offs:** sets over 10 reps still store normally but do not contribute an e1RM through this policy. Machine/cable and dumbbell conventions remain exercise/equipment dependent. Two-decimal output precision does not represent prediction accuracy. Pure parameterized tests cover all supported RPE steps, numerical/eligibility boundaries and rounding; HTTP/database tests verify consistent serialization and recalculation.
+
+## 2026-10-22 — Small React client with a separate local proxy
+
+**Context:** Milestone 5 needs usable gym logging over the already tested Java API, without beginning history analytics or deployment.
+
+**Options:** add routing/state/component frameworks, embed a bundle in the JAR now, or use conventional React state and a separate Vite development server.
+
+**Choice:** React 19.3.1, TypeScript 7.0.2 and Vite 8.3.5, exact npm pins and lockfile; Node >=24. Hash routes and local component state, semantic custom CSS and original SVGs. Loopback:5175 proxies `/api` to Java; preview uses loopback:4173. No backend CORS or packaging change.
+
+**Reasoning:** keeps build/runtime boundaries visible for learning, uses the existing API unchanged and avoids dependencies for a three-route interface. An explicit port avoids the unrelated local project using 5173. Both themes use readable numeric inputs and a two-column set form on narrow screens.
+
+**Trade-offs:** two local processes plus PostgreSQL; npm and Maven have separate dependency graphs. Hash routing is deliberately simple. There is no production frontend host/API routing, auth, charting or history aggregation yet. Direct package versions and installed lockfile are pinned; future upgrades require fresh compatibility verification.
+
+## 2026-10-22 — Explicit saves and server-derived estimates
+
+**Context:** silent retries or form resets can corrupt a workout user's intent, and Java must remain the calculation authority.
+
+**Options:** autosave/offline persistence, a global cache, or explicit resource saves with local draft ownership.
+
+**Choice:** each form owns a draft and pending state; API responses merge only their relevant subtree. Warn on unsaved navigation, block navigation during writes, cancel obsolete GETs and bound requests to 15 seconds. Never automatically retry mutations. A successful create/delete explicitly permits its destination after the response. Keep a partially created logged exercise visible when its first-set request fails. Browser storage retains only theme preference. Display backend estimates/reasons/warnings in Finnish without strength math in TypeScript.
+
+**Reasoning:** makes persistence reviewable and preserves unrelated edits. A lost response cannot prove failure; explicit recovery avoids duplicate appends. Navigation authorization after saves avoids a real Safari race with React effect cleanup. A one-time focus marker prevents first-set focus from stealing focus after later appends.
+
+**Trade-offs:** more explicit save actions; no offline support, idempotency keys, optimistic locking or multi-tab merge. First exercise/set creation is two API calls with recoverable partial success. Client number parsing is only transport preparation; Java BigDecimal and database constraints own exact storage/calculation. Automated semantic audits plus manual responsive/keyboard checks provide bounded evidence, not full accessibility certification.
+
+
+## 2026-10-22 — Translate the existing catalogue, preserving identity
+
+**Context:** Roope replaced the earlier English-name preference with Finnish exercise names.
+
+**Options:** edit an applied seed migration, translate only in React, replace rows, or add a versioned in-place rename.
+
+**Choice:** V5 updates only known built-in names to Finnish, preserving IDs and references. Existing custom names/fields are untouched. Name collisions fail atomically rather than modifying user data.
+
+**Reasoning:** makes search, Swagger, nested workout reads and UI agree while keeping migration history valid and existing workouts linked to the same exercises.
+
+**Trade-offs:** old workouts display the catalogue's current name, because names are not historical snapshots. A custom-name conflict needs deliberate resolution before startup can finish; integration tests verify safe rollback. Translations use conventional Finnish names without changing exercise scope or metadata.
+
+
+## 2026-10-22 — Two manually configured session accounts with scoped records
+
+**Context:** Roope authorized one account for actual workouts and one for demonstration after discussing read-only demo access. Deployment remains a separate approval.
+
+**Options:** separate app/database deployments, multi-user registration, JWT/OAuth, or two fixed principals with sessions and explicit record ownership.
+
+**Choice:** Boot-managed Spring Security; fixed owner/demo usernames with distinct externally provided BCrypt hashes; standard form login/server sessions and default CSRF. Owner may write; demo is read-only. V6 assigns legacy records to owner and creates invented demo data. Account-scoped repositories protect workout and nested IDs; catalogue built-ins are shared and owner custom exercises remain private. No request field chooses ownership. React authenticates before mounting App, clears state on logout/account switch and preserves same-account drafts behind reauthentication without write retries.
+
+**Reasoning:** matches the two-account request and is understandable as a conventional Spring filter/service/repository boundary. No signup, mail service, token refresh protocol or additional identity provider is needed. No plaintext password or hash is committed; local setup generates a private handoff file and ignored environment hashes. Session cookies default Secure/HttpOnly/SameSite=Strict, with an explicit local HTTP override.
+
+**Trade-offs:** one application/database shares infrastructure and service blast radius; this is weaker physical separation than the earlier separate-stack suggestion. Fixed keys/check constraints intentionally do not support arbitrary future users. Supporting additional writable users requires a deliberate account/domain migration and per-user catalogue uniqueness policy. Sessions are process-local and invalidate on restart; password recovery uses trusted host configuration. The process-wide login budget is bounded but can temporarily delay both users and needs complementary production proxy controls. Production HTTPS/routing/backups/NUC review remain separate.
