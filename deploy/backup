@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+umask 077
+project_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$project_dir"
+mkdir -p backups
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+file="backups/puntti-urpo-$stamp.dump"
+docker compose --env-file .env -f deploy/compose.yaml exec -T db pg_dump -U punttiurpo -d punttiurpo -Fc > "$file.tmp"
+mv "$file.tmp" "$file"
+# Inspect the archive before considering the backup complete.
+docker compose --env-file .env -f deploy/compose.yaml exec -T db pg_restore --list < "$file" >/dev/null
+find backups -type f -name 'puntti-urpo-*.dump' -mtime +7 -delete
+printf '%s\n' "$file"

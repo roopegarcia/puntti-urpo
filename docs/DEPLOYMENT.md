@@ -1,5 +1,7 @@
 # Operation and deployment
 
+**2026-10-22 deployment authorization:** Roope explicitly requested commit, push and deployment. NUC inspection is complete; production preparation/verification is in progress. See [the production runbook](../deploy/README.md). Earlier readiness notes below record pre-deployment state and are superseded by this status as verification completes.
+
 ## Local operation
 
 The [README](../README.md) provides the copyable setup, environment export, Maven and executable-JAR commands. Requirements are JDK 25, Node.js >=24 for the frontend, and running Docker Desktop; global Maven is unnecessary.
