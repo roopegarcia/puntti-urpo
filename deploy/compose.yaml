@@ -50,7 +50,7 @@ services:
     cpus: 1.5
     pids_limit: 128
     read_only: true
-    tmpfs: [/tmp:rw,nosuid,noexec,size=64m]
+    tmpfs: ['/tmp:rw,nosuid,noexec,size=64m']
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     healthcheck:
@@ -71,7 +71,7 @@ services:
     cpus: 0.5
     pids_limit: 64
     read_only: true
-    tmpfs: [/tmp:rw,nosuid,noexec,size=16m]
+    tmpfs: ['/tmp:rw,nosuid,noexec,size=16m']
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     healthcheck:
